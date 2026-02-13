@@ -33,6 +33,7 @@ export default function CollectionManagement() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
     const [formData, setFormData] = useState({ name: "", description: "", image_url: "" });
+    const [pendingFile, setPendingFile] = useState<{ file: File; preview: string } | null>(null);
 
     // Fetch Collections
     const { data: collections = [] } = useQuery({
@@ -52,7 +53,7 @@ export default function CollectionManagement() {
         mutationFn: async (newCollection: { name: string; description: string; image_url: string }) => {
             const { data, error } = await supabase
                 .from("collections")
-                .insert([newCollection])
+                .insert(newCollection)
                 .select();
             if (error) throw error;
             return data;
@@ -61,7 +62,7 @@ export default function CollectionManagement() {
             queryClient.invalidateQueries({ queryKey: ["collections"] });
             toast.success("Collection created successfully");
             setIsDialogOpen(false);
-            setFormData({ name: "", description: "", image_url: "" });
+            resetForm();
         },
         onError: (error: Error) => {
             toast.error(error.message || "Failed to create collection");
@@ -83,13 +84,21 @@ export default function CollectionManagement() {
             queryClient.invalidateQueries({ queryKey: ["collections"] });
             toast.success("Collection updated successfully");
             setIsDialogOpen(false);
-            setEditingCollection(null);
-            setFormData({ name: "", description: "", image_url: "" });
+            resetForm();
         },
         onError: (error: Error) => {
             toast.error(error.message || "Failed to update collection");
         },
     });
+
+    const resetForm = () => {
+        setEditingCollection(null);
+        setFormData({ name: "", description: "", image_url: "" });
+        if (pendingFile) {
+            URL.revokeObjectURL(pendingFile.preview);
+            setPendingFile(null);
+        }
+    };
 
     // Delete Collection
     const deleteMutation = useMutation({
@@ -107,6 +116,7 @@ export default function CollectionManagement() {
     });
 
     const handleOpenEdit = (collection: Collection) => {
+        resetForm();
         setEditingCollection(collection);
         setFormData({
             name: collection.name,
@@ -116,27 +126,41 @@ export default function CollectionManagement() {
         setIsDialogOpen(true);
     };
 
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
 
         const file = files[0];
-        try {
-            toast.loading("Uploading image...", { id: "upload" });
-            const url = await uploadProductImage(file);
-            setFormData((prev) => ({ ...prev, image_url: url }));
-            toast.success("Image uploaded", { id: "upload" });
-        } catch (error) {
-            toast.error("Upload failed", { id: "upload" });
+        if (pendingFile) {
+            URL.revokeObjectURL(pendingFile.preview);
         }
+        setPendingFile({
+            file,
+            preview: URL.createObjectURL(file)
+        });
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (editingCollection) {
-            updateMutation.mutate({ id: editingCollection.id, updates: formData });
-        } else {
-            createMutation.mutate(formData);
+
+        let finalImageUrl = formData.image_url;
+
+        try {
+            if (pendingFile) {
+                toast.loading("Uploading image...", { id: "upload" });
+                finalImageUrl = await uploadProductImage(pendingFile.file);
+                toast.success("Image uploaded", { id: "upload" });
+            }
+
+            const payload = { ...formData, image_url: finalImageUrl };
+
+            if (editingCollection) {
+                updateMutation.mutate({ id: editingCollection.id, updates: payload });
+            } else {
+                createMutation.mutate(payload);
+            }
+        } catch (error) {
+            toast.error("Upload failed", { id: "upload" });
         }
     };
 
@@ -198,8 +222,7 @@ export default function CollectionManagement() {
                     <p className="text-muted-foreground">Manage your product collections</p>
                 </div>
                 <Button onClick={() => {
-                    setEditingCollection(null);
-                    setFormData({ name: "", description: "", image_url: "" });
+                    resetForm();
                     setIsDialogOpen(true);
                 }} className="flex items-center gap-2">
                     <Plus className="h-4 w-4" />
@@ -209,7 +232,10 @@ export default function CollectionManagement() {
 
             <DataTable columns={columns} data={collections} />
 
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                if (!open) resetForm();
+                setIsDialogOpen(open);
+            }}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>
@@ -238,12 +264,19 @@ export default function CollectionManagement() {
                             <label className="text-sm font-medium">Collection Image</label>
                             <div className="flex gap-4 items-center">
                                 <div className="h-20 w-20 rounded-md border bg-muted flex items-center justify-center overflow-hidden relative">
-                                    {formData.image_url ? (
+                                    {(pendingFile || formData.image_url) ? (
                                         <>
-                                            <Image src={formData.image_url} alt="" fill className="object-cover" />
+                                            <Image src={pendingFile?.preview || formData.image_url} alt="" fill className="object-cover" />
                                             <button
                                                 type="button"
-                                                onClick={() => setFormData({ ...formData, image_url: "" })}
+                                                onClick={() => {
+                                                    if (pendingFile) {
+                                                        URL.revokeObjectURL(pendingFile.preview);
+                                                        setPendingFile(null);
+                                                    } else {
+                                                        setFormData({ ...formData, image_url: "" });
+                                                    }
+                                                }}
                                                 className="absolute top-1 right-1 p-0.5 bg-destructive text-white rounded-full z-10"
                                             >
                                                 <X size={12} />

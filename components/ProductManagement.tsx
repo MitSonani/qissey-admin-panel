@@ -34,6 +34,8 @@ import {
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
 import { uploadProductImage } from "@/lib/storage";
+import { TagInput } from "@/components/ui/tag-input";
+import { Separator } from "@/components/ui/separator";
 import Image from "next/image";
 
 type Collection = {
@@ -43,6 +45,7 @@ type Collection = {
 
 type Product = {
     id: string;
+    sku: string | null;
     name: string;
     description: string;
     price: number;
@@ -67,6 +70,7 @@ export default function ProductManagement() {
 
     // Form State
     const [formData, setFormData] = useState({
+        sku: "",
         name: "",
         description: "",
         price: "",
@@ -77,7 +81,9 @@ export default function ProductManagement() {
         image_urls: [] as string[],
         sizes: [] as string[],
         fabrics: [] as string[],
+        colors: [] as string[],
     });
+    const [pendingFiles, setPendingFiles] = useState<{ file: File; preview: string }[]>([]);
 
     // Fetch Products
     const { data: products = [] } = useQuery({
@@ -172,6 +178,7 @@ export default function ProductManagement() {
 
     const resetForm = () => {
         setFormData({
+            sku: "",
             name: "",
             description: "",
             price: "",
@@ -182,7 +189,9 @@ export default function ProductManagement() {
             image_urls: [],
             sizes: [],
             fabrics: [],
+            colors: [],
         });
+        setPendingFiles([]);
         setEditingProduct(null);
     };
 
@@ -194,6 +203,7 @@ export default function ProductManagement() {
     const handleOpenEdit = (product: Product) => {
         setEditingProduct(product);
         setFormData({
+            sku: product.sku || "",
             name: product.name,
             description: product.description || "",
             price: product.price.toString(),
@@ -204,75 +214,84 @@ export default function ProductManagement() {
             image_urls: product.image_urls || [],
             sizes: product.sizes || [],
             fabrics: product.fabrics || [],
+            colors: product.colors || [],
         });
+        setPendingFiles([]);
         setIsDialogOpen(true);
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const payload = {
-            ...formData,
-            price: parseFloat(formData.price),
-            discount_price: formData.discount_price ? parseFloat(formData.discount_price) : null,
-            stock_quantity: parseInt(formData.stock_quantity),
-        };
 
-        if (editingProduct) {
-            updateMutation.mutate({ id: editingProduct.id, updates: payload as Partial<Product> });
-        } else {
-            createMutation.mutate(payload as Partial<Product>);
-        }
-    };
+        let finalImageUrls = [...formData.image_urls];
 
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files || files.length === 0) return;
-
-        const file = files[0];
         try {
-            toast.loading("Uploading image to S3...", { id: "upload" });
-            const url = await uploadProductImage(file);
-            setFormData((prev) => ({
-                ...prev,
-                image_urls: [...prev.image_urls, url],
-            }));
-            toast.success("Image uploaded", { id: "upload" });
+            if (pendingFiles.length > 0) {
+                toast.loading(`Uploading ${pendingFiles.length} images...`, { id: "upload" });
+                const uploadPromises = pendingFiles.map(pf => uploadProductImage(pf.file));
+                const uploadedUrls = await Promise.all(uploadPromises);
+                finalImageUrls = [...finalImageUrls, ...uploadedUrls];
+                toast.success("All images uploaded", { id: "upload" });
+            }
+
+            const payload = {
+                ...formData,
+                image_urls: finalImageUrls,
+                price: parseFloat(formData.price),
+                discount_price: formData.discount_price ? parseFloat(formData.discount_price) : null,
+                stock_quantity: parseInt(formData.stock_quantity),
+            };
+
+            if (editingProduct) {
+                updateMutation.mutate({ id: editingProduct.id, updates: payload as Partial<Product> });
+            } else {
+                createMutation.mutate(payload as Partial<Product>);
+            }
         } catch (error) {
-            const message = error instanceof Error ? error.message : "Upload failed";
+            const message = error instanceof Error ? error.message : "Submission failed";
             toast.error(message, { id: "upload" });
         }
     };
 
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        const newPending = Array.from(files).map(file => ({
+            file,
+            preview: URL.createObjectURL(file)
+        }));
+
+        setPendingFiles(prev => [...prev, ...newPending]);
+    };
+
     const removeImage = (index: number) => {
-        setFormData((prev) => ({
-            ...prev,
-            image_urls: prev.image_urls.filter((_, i) => i !== index),
-        }));
+        const totalExisting = formData.image_urls.length;
+        if (index < totalExisting) {
+            setFormData(prev => ({
+                ...prev,
+                image_urls: prev.image_urls.filter((_, i) => i !== index),
+            }));
+        } else {
+            const pendingIndex = index - totalExisting;
+            setPendingFiles(prev => {
+                const newPending = [...prev];
+                URL.revokeObjectURL(newPending[pendingIndex].preview);
+                newPending.splice(pendingIndex, 1);
+                return newPending;
+            });
+        }
     };
 
-    const toggleSize = (size: string) => {
-        setFormData((prev) => ({
-            ...prev,
-            sizes: prev.sizes.includes(size)
-                ? prev.sizes.filter((s) => s !== size)
-                : [...prev.sizes, size],
-        }));
-    };
-
-    const toggleFabric = (fabric: string) => {
-        setFormData((prev) => ({
-            ...prev,
-            fabrics: prev.fabrics.includes(fabric)
-                ? prev.fabrics.filter((f) => f !== fabric)
-                : [...prev.fabrics, fabric],
-        }));
-    };
+    const setSizes = (sizes: string[]) => setFormData((prev) => ({ ...prev, sizes }));
+    const setFabrics = (fabrics: string[]) => setFormData((prev) => ({ ...prev, fabrics }));
+    const setColors = (colors: string[]) => setFormData((prev) => ({ ...prev, colors }));
 
     const columns: ColumnDef<Product>[] = [
         {
             accessorKey: "image_urls",
             header: "Image",
-            cell: ({ row }) => {
+            cell: ({ row }: { row: any }) => {
                 const url = row.original.image_urls?.[0];
                 return (
                     <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
@@ -288,7 +307,7 @@ export default function ProductManagement() {
         {
             accessorKey: "name",
             header: "Product",
-            cell: ({ row }) => (
+            cell: ({ row }: { row: any }) => (
                 <div className="flex flex-col">
                     <span className="font-medium">{row.original.name}</span>
                     <span className="text-xs text-muted-foreground">{row.original.collection?.name || "No Collection"}</span>
@@ -298,7 +317,7 @@ export default function ProductManagement() {
         {
             accessorKey: "price",
             header: "Price",
-            cell: ({ row }) => (
+            cell: ({ row }: { row: any }) => (
                 <div className="flex flex-col">
                     <span>${row.original.price.toFixed(2)}</span>
                     {row.original.discount_price && (
@@ -310,7 +329,7 @@ export default function ProductManagement() {
         {
             accessorKey: "stock_quantity",
             header: "Stock",
-            cell: ({ row }) => {
+            cell: ({ row }: { row: any }) => {
                 const stock = row.original.stock_quantity;
                 return (
                     <Badge variant={stock < 10 ? "destructive" : "secondary"}>
@@ -322,7 +341,7 @@ export default function ProductManagement() {
         {
             accessorKey: "status",
             header: "Status",
-            cell: ({ row }) => (
+            cell: ({ row }: { row: any }) => (
                 <Badge variant={row.original.status === "active" ? "default" : "outline"}>
                     {row.original.status}
                 </Badge>
@@ -331,7 +350,7 @@ export default function ProductManagement() {
         {
             id: "actions",
             header: "Actions",
-            cell: ({ row }) => (
+            cell: ({ row }: { row: any }) => (
                 <div className="flex items-center gap-2">
                     <Button
                         variant="ghost"
@@ -358,8 +377,6 @@ export default function ProductManagement() {
         },
     ];
 
-    const availableSizes = ["S", "M", "L", "XL", "XXL"];
-    const availableFabrics = ["Cotton", "Polyester", "Wool", "Silk", "Linen", "Denim"];
 
     return (
         <div className="space-y-6">
@@ -402,168 +419,245 @@ export default function ProductManagement() {
             <DataTable columns={columns} data={products} />
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {editingProduct ? "Edit Product" : "Add New Product"}
-                        </DialogTitle>
+                <DialogContent className="max-w-[1600px] sm:max-w-none w-[98vw] h-[95vh] max-h-[95vh] p-0 border-none shadow-2xl flex flex-col bg-background overflow-hidden rounded-[1.5rem]">
+                    <DialogHeader className="p-6 bg-background border-b shrink-0">
+                        <div className="flex items-center justify-between">
+                            <DialogTitle className="text-xl font-semibold text-primary">
+                                {editingProduct ? "Edit Product" : "Add New Product"}
+                            </DialogTitle>
+                        </div>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-6 py-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Name</label>
-                                <Input
-                                    required
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Collection</label>
-                                <Select
-                                    value={formData.collection_id}
-                                    onValueChange={(v) => setFormData({ ...formData, collection_id: v })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Collection" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {collections.map((col) => (
-                                            <SelectItem key={col.id} value={col.id}>
-                                                {col.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
 
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Description</label>
-                            <textarea
-                                className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                value={formData.description}
-                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                            />
-                        </div>
+                    <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+                        <div className="flex-1 overflow-y-auto px-8 py-10 space-y-16 custom-scrollbar bg-slate-50/20">
+                            {/* Section: Product Genesis */}
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
+                                <div className="lg:col-span-4 space-y-2">
 
-                        <div className="grid grid-cols-3 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Price ($)</label>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    required
-                                    value={formData.price}
-                                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Discount Price ($)</label>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={formData.discount_price}
-                                    onChange={(e) => setFormData({ ...formData, discount_price: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Stock</label>
-                                <Input
-                                    type="number"
-                                    required
-                                    value={formData.stock_quantity}
-                                    onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                                />
-                            </div>
-                        </div>
+                                    <h3 className="text-lg font-semibold">Basic Information</h3>
+                                </div>
 
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Sizes</label>
-                            <div className="flex flex-wrap gap-2">
-                                {availableSizes.map((size) => (
-                                    <Button
-                                        key={size}
-                                        type="button"
-                                        variant={formData.sizes.includes(size) ? "default" : "outline"}
-                                        size="sm"
-                                        onClick={() => toggleSize(size)}
-                                    >
-                                        {size}
-                                    </Button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Fabrics</label>
-                            <div className="flex flex-wrap gap-2">
-                                {availableFabrics.map((fabric) => (
-                                    <Button
-                                        key={fabric}
-                                        type="button"
-                                        variant={formData.fabrics.includes(fabric) ? "default" : "outline"}
-                                        size="sm"
-                                        onClick={() => toggleFabric(fabric)}
-                                    >
-                                        {fabric}
-                                    </Button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Images</label>
-                            <div className="grid grid-cols-4 gap-4">
-                                {formData.image_urls.map((url, i) => (
-                                    <div key={i} className="group relative aspect-square rounded-md border overflow-hidden">
-                                        <Image src={url} alt="" fill className="object-cover" />
-                                        <button
-                                            type="button"
-                                            onClick={() => removeImage(i)}
-                                            className="absolute top-1 right-1 p-1 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                        >
-                                            <X className="h-3 w-3" />
-                                        </button>
+                                <div className="lg:col-span-8 space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-foreground/80">SKU</label>
+                                            <Input
+                                                placeholder="e.g. NH-001"
+                                                value={formData.sku}
+                                                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                                                className="bg-muted/30 border border-muted-foreground/10 focus:bg-background transition-all h-10 rounded-md"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-foreground/80">Product Name</label>
+                                            <Input
+                                                required
+                                                placeholder="Product name"
+                                                value={formData.name}
+                                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                                className="h-10 border border-muted-foreground/10 bg-muted/30 focus:bg-background rounded-md"
+                                            />
+                                        </div>
                                     </div>
-                                ))}
-                                <label className="aspect-square rounded-md border border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors">
-                                    <Upload className="h-6 w-6 text-muted-foreground" />
-                                    <span className="text-xs text-muted-foreground mt-2">Upload</span>
-                                    <input type="file" hidden accept="image/*" onChange={handleImageUpload} />
-                                </label>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-foreground/80">Collection</label>
+                                            <Select
+                                                value={formData.collection_id}
+                                                onValueChange={(v) => setFormData({ ...formData, collection_id: v })}
+                                            >
+                                                <SelectTrigger className="h-10 bg-muted/30 border border-muted-foreground/10 rounded-md">
+                                                    <SelectValue placeholder="Select collection" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {collections.map((col) => (
+                                                        <SelectItem key={col.id} value={col.id}>
+                                                            {col.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-foreground/80">Status</label>
+                                            <Select
+                                                value={formData.status}
+                                                onValueChange={(v: "active" | "inactive") => setFormData({ ...formData, status: v })}
+                                            >
+                                                <SelectTrigger className="h-10 bg-muted/30 border border-muted-foreground/10 rounded-md">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="active">Active</SelectItem>
+                                                    <SelectItem value="inactive">Draft</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-foreground/80">Description</label>
+                                        <textarea
+                                            placeholder="Product description..."
+                                            className="w-full min-h-[100px] rounded-md border border-muted-foreground/10 bg-muted/30 px-3 py-2 text-sm focus:bg-background transition-all resize-none"
+                                            value={formData.description}
+                                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <Separator className="opacity-40" />
+
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
+                                <div className="lg:col-span-4 space-y-2">
+                                    <h3 className="text-lg font-semibold">Pricing & Inventory</h3>
+                                </div>
+
+                                <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-8">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-foreground/80">Price ($)</label>
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            required
+                                            placeholder="0.00"
+                                            value={formData.price}
+                                            onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                                            className="h-10 bg-muted/30 border border-muted-foreground/10 rounded-md"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-foreground/80">Discount Price ($)</label>
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="Optional"
+                                            value={formData.discount_price}
+                                            onChange={(e) => setFormData({ ...formData, discount_price: e.target.value })}
+                                            className="h-10 bg-muted/30 border border-muted-foreground/10 rounded-md"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-foreground/80">Stock</label>
+                                        <Input
+                                            type="number"
+                                            required
+                                            placeholder="Quantity"
+                                            value={formData.stock_quantity}
+                                            onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                                            className="h-10 bg-muted/30 border border-muted-foreground/10 rounded-md"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <Separator className="opacity-40" />
+
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
+                                <div className="lg:col-span-4 space-y-2">
+
+                                    <h3 className="text-lg font-semibold">Specifications</h3>
+                                </div>
+
+                                <div className="lg:col-span-8 space-y-8">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-foreground/80">Sizes</label>
+                                            <TagInput
+                                                placeholder="Add size"
+                                                tags={formData.sizes}
+                                                setTags={setSizes}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-foreground/80">Materials</label>
+                                            <TagInput
+                                                placeholder="Add fabric"
+                                                tags={formData.fabrics}
+                                                setTags={setFabrics}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-foreground/80">Colors</label>
+                                        <TagInput
+                                            placeholder="Add colors"
+                                            tags={formData.colors}
+                                            setTags={setColors}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <Separator className="opacity-40" />
+
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 pb-12">
+                                <div className="lg:col-span-4 space-y-2">
+
+                                    <h3 className="text-lg font-semibold">Product Images</h3>
+                                </div>
+
+                                <div className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
+                                    {formData.image_urls.map((url, i) => (
+                                        <div key={`existing-${i}`} className="group relative aspect-[3/4.5] rounded-2xl border-none overflow-hidden bg-muted/20 shadow-lg hover:shadow-2xl transition-all duration-700">
+                                            <Image src={url} alt="" fill className="object-cover transition-transform duration-1000 group-hover:scale-110" />
+                                            <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeImage(i)}
+                                                    className="h-10 w-10 rounded-full bg-destructive text-white flex items-center justify-center hover:scale-110 transition-transform"
+                                                >
+                                                    <X size={20} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {pendingFiles.map((pf, i) => (
+                                        <div key={`pending-${i}`} className="group relative aspect-[3/4.5] rounded-2xl border-none overflow-hidden bg-muted/20 shadow-lg hover:shadow-2xl transition-all duration-700">
+                                            <Image src={pf.preview} alt="" fill className="object-cover transition-transform duration-1000 group-hover:scale-110" />
+                                            <div className="absolute top-2 right-2 z-10">
+                                                <Badge className="bg-primary/90 text-[10px] uppercase tracking-tighter">Pending</Badge>
+                                            </div>
+                                            <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeImage(formData.image_urls.length + i)}
+                                                    className="h-10 w-10 rounded-full bg-destructive text-white flex items-center justify-center hover:scale-110 transition-transform"
+                                                >
+                                                    <X size={20} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <label className="aspect-[3/4.5] rounded-2xl border-4 border-dashed border-muted-foreground/10 flex flex-col items-center justify-center cursor-pointer hover:bg-muted/40 hover:border-primary/30 transition-all group active:scale-[0.98] duration-300">
+                                        <div className="p-6 rounded-xl bg-muted group-hover:bg-primary/5 transition-all duration-300">
+                                            <Upload className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                                        </div>
+                                        <span className="text-xs font-medium text-muted-foreground mt-4 group-hover:text-primary transition-colors">Upload Image</span>
+                                        <input type="file" hidden accept="image/*" multiple onChange={handleImageUpload} />
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Status</label>
-                            <Select
-                                value={formData.status}
-                                onValueChange={(v: "active" | "inactive") => setFormData({ ...formData, status: v })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="active">Active</SelectItem>
-                                    <SelectItem value="inactive">Inactive</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button
-                                type="submit"
-                                disabled={createMutation.isPending || updateMutation.isPending}
-                            >
-                                {(createMutation.isPending || updateMutation.isPending) && (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                )}
-                                {editingProduct ? "Update Product" : "Create Product"}
-                            </Button>
+                        <DialogFooter className="bg-background shrink-0 px-6 py-4 flex flex-col sm:flex-row gap-3 border-t items-center justify-end sticky bottom-0 z-[100]">
+                            <div className="flex gap-2 w-full sm:w-auto">
+                                <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="h-10 border-none hover:bg-destructive/10 hover:text-destructive flex items-center gap-2 font-medium transition-all rounded-md px-4">
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={createMutation.isPending || updateMutation.isPending}
+                                    className="sm:min-w-[160px] h-10 shadow-sm hover:bg-primary/90 transition-all font-medium rounded-md px-6"
+                                >
+                                    {(createMutation.isPending || updateMutation.isPending) && (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    )}
+                                    {editingProduct ? "Save Changes" : "Save Product"}
+                                </Button>
+                            </div>
                         </DialogFooter>
                     </form>
                 </DialogContent>

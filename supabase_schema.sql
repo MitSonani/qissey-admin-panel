@@ -11,6 +11,7 @@ CREATE TABLE collections (
 -- Products Table
 CREATE TABLE products (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  sku TEXT UNIQUE,
   name TEXT NOT NULL,
   description TEXT,
   price NUMERIC(10, 2) NOT NULL DEFAULT 0,
