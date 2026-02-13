@@ -1,10 +1,10 @@
--- Categories Table
+-- Collections Table
 CREATE TABLE collections (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
   image_url TEXT NOT NULL,
   description TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -15,13 +15,15 @@ CREATE TABLE products (
   description TEXT,
   price NUMERIC(10, 2) NOT NULL DEFAULT 0,
   discount_price NUMERIC(10, 2),
-  category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+  collection_id UUID REFERENCES collections(id) ON DELETE SET NULL,
   sizes TEXT[] DEFAULT '{}',
   colors TEXT[] DEFAULT '{}',
+  fabrics TEXT[] DEFAULT '{}', 
   stock_quantity INTEGER NOT NULL DEFAULT 0,
   image_urls TEXT[] DEFAULT '{}',
   status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Customers Table

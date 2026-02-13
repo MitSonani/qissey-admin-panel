@@ -20,7 +20,7 @@ type ProductStock = {
     id: string;
     name: string;
     stock_quantity: number;
-    category: { name: string } | null;
+    collection: { name: string } | null;
 };
 
 export default function InventoryManagement() {
@@ -33,14 +33,14 @@ export default function InventoryManagement() {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from("products")
-                .select("id, name, stock_quantity, category:categories(name)")
+                .select("id, name, stock_quantity, collection:collections(name)")
                 .order("stock_quantity", { ascending: true });
             if (error) throw error;
 
             // Explicitly handling the Supabase relationship response structure
             return (data as unknown as ProductStock[]).map(p => ({
                 ...p,
-                category: Array.isArray(p.category) ? (p.category as unknown as { name: string }[])[0] : p.category
+                collection: Array.isArray(p.collection) ? (p.collection as unknown as { name: string }[])[0] : p.collection
             })) as ProductStock[];
         },
     });
@@ -79,17 +79,17 @@ export default function InventoryManagement() {
         {
             accessorKey: "name",
             header: "Product",
-            cell: ({ row }) => (
+            cell: ({ row }: { row: { original: ProductStock } }) => (
                 <div className="flex flex-col">
                     <span className="font-medium">{row.original.name}</span>
-                    <span className="text-xs text-muted-foreground">{row.original.category?.name || "No Category"}</span>
+                    <span className="text-xs text-muted-foreground">{row.original.collection?.name || "No Collection"}</span>
                 </div>
             ),
         },
         {
             accessorKey: "stock_quantity",
             header: "Current Stock",
-            cell: ({ row }) => {
+            cell: ({ row }: { row: { original: ProductStock } }) => {
                 const stock = row.original.stock_quantity;
                 return (
                     <div className="flex items-center gap-2">
@@ -102,7 +102,7 @@ export default function InventoryManagement() {
         {
             id: "update",
             header: "New Quantity",
-            cell: ({ row }) => (
+            cell: ({ row }: { row: { original: ProductStock } }) => (
                 <div className="flex items-center gap-2 max-w-[150px]">
                     <Input
                         type="number"
@@ -116,7 +116,7 @@ export default function InventoryManagement() {
         {
             id: "actions",
             header: "Action",
-            cell: ({ row }) => {
+            cell: ({ row }: { row: { original: ProductStock } }) => {
                 const isModified = stockUpdates[row.original.id] !== undefined;
                 return (
                     <Button

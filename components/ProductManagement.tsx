@@ -36,7 +36,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import { uploadProductImage } from "@/lib/storage";
 import Image from "next/image";
 
-type Category = {
+type Collection = {
     id: string;
     name: string;
 };
@@ -47,14 +47,15 @@ type Product = {
     description: string;
     price: number;
     discount_price: number | null;
-    category_id: string | null;
+    collection_id: string | null;
     sizes: string[];
     colors: string[];
+    fabrics: string[];
     stock_quantity: number;
     image_urls: string[];
     status: "active" | "inactive";
     created_at: string;
-    category?: Category;
+    collection?: Collection;
 };
 
 export default function ProductManagement() {
@@ -62,7 +63,7 @@ export default function ProductManagement() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
-    const [categoryFilter, setCategoryFilter] = useState("all");
+    const [collectionFilter, setCollectionFilter] = useState("all");
 
     // Form State
     const [formData, setFormData] = useState({
@@ -70,28 +71,29 @@ export default function ProductManagement() {
         description: "",
         price: "",
         discount_price: "",
-        category_id: "",
+        collection_id: "",
         stock_quantity: "",
         status: "active" as "active" | "inactive",
         image_urls: [] as string[],
         sizes: [] as string[],
+        fabrics: [] as string[],
     });
 
     // Fetch Products
     const { data: products = [] } = useQuery({
-        queryKey: ["products", searchQuery, categoryFilter],
+        queryKey: ["products", searchQuery, collectionFilter],
         queryFn: async () => {
             let query = supabase
                 .from("products")
-                .select("*, category:categories(id, name)")
+                .select("*, collection:collections(id, name)")
                 .order("created_at", { ascending: false });
 
             if (searchQuery) {
                 query = query.ilike("name", `%${searchQuery}%`);
             }
 
-            if (categoryFilter !== "all") {
-                query = query.eq("category_id", categoryFilter);
+            if (collectionFilter !== "all") {
+                query = query.eq("collection_id", collectionFilter);
             }
 
             const { data, error } = await query;
@@ -100,13 +102,13 @@ export default function ProductManagement() {
         },
     });
 
-    // Fetch Categories for dropdown
-    const { data: categories = [] } = useQuery({
-        queryKey: ["categories"],
+    // Fetch Collections for dropdown
+    const { data: collections = [] } = useQuery({
+        queryKey: ["collections"],
         queryFn: async () => {
-            const { data, error } = await supabase.from("categories").select("id, name");
+            const { data, error } = await supabase.from("collections").select("id, name");
             if (error) throw error;
-            return data as Category[];
+            return data as Collection[];
         },
     });
 
@@ -174,11 +176,12 @@ export default function ProductManagement() {
             description: "",
             price: "",
             discount_price: "",
-            category_id: "",
+            collection_id: "",
             stock_quantity: "",
             status: "active",
             image_urls: [],
             sizes: [],
+            fabrics: [],
         });
         setEditingProduct(null);
     };
@@ -195,11 +198,12 @@ export default function ProductManagement() {
             description: product.description || "",
             price: product.price.toString(),
             discount_price: product.discount_price?.toString() || "",
-            category_id: product.category_id || "",
+            collection_id: product.collection_id || "",
             stock_quantity: product.stock_quantity.toString(),
             status: product.status,
             image_urls: product.image_urls || [],
             sizes: product.sizes || [],
+            fabrics: product.fabrics || [],
         });
         setIsDialogOpen(true);
     };
@@ -226,7 +230,7 @@ export default function ProductManagement() {
 
         const file = files[0];
         try {
-            toast.loading("Uploading image...", { id: "upload" });
+            toast.loading("Uploading image to S3...", { id: "upload" });
             const url = await uploadProductImage(file);
             setFormData((prev) => ({
                 ...prev,
@@ -255,6 +259,15 @@ export default function ProductManagement() {
         }));
     };
 
+    const toggleFabric = (fabric: string) => {
+        setFormData((prev) => ({
+            ...prev,
+            fabrics: prev.fabrics.includes(fabric)
+                ? prev.fabrics.filter((f) => f !== fabric)
+                : [...prev.fabrics, fabric],
+        }));
+    };
+
     const columns: ColumnDef<Product>[] = [
         {
             accessorKey: "image_urls",
@@ -278,7 +291,7 @@ export default function ProductManagement() {
             cell: ({ row }) => (
                 <div className="flex flex-col">
                     <span className="font-medium">{row.original.name}</span>
-                    <span className="text-xs text-muted-foreground">{row.original.category?.name || "No Category"}</span>
+                    <span className="text-xs text-muted-foreground">{row.original.collection?.name || "No Collection"}</span>
                 </div>
             ),
         },
@@ -346,6 +359,7 @@ export default function ProductManagement() {
     ];
 
     const availableSizes = ["S", "M", "L", "XL", "XXL"];
+    const availableFabrics = ["Cotton", "Polyester", "Wool", "Silk", "Linen", "Denim"];
 
     return (
         <div className="space-y-6">
@@ -370,15 +384,15 @@ export default function ProductManagement() {
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                 </div>
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <Select value={collectionFilter} onValueChange={setCollectionFilter}>
                     <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="All Categories" />
+                        <SelectValue placeholder="All Collections" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">All Categories</SelectItem>
-                        {categories.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id}>
-                                {cat.name}
+                        <SelectItem value="all">All Collections</SelectItem>
+                        {collections.map((col) => (
+                            <SelectItem key={col.id} value={col.id}>
+                                {col.name}
                             </SelectItem>
                         ))}
                     </SelectContent>
@@ -405,18 +419,18 @@ export default function ProductManagement() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Category</label>
+                                <label className="text-sm font-medium">Collection</label>
                                 <Select
-                                    value={formData.category_id}
-                                    onValueChange={(v) => setFormData({ ...formData, category_id: v })}
+                                    value={formData.collection_id}
+                                    onValueChange={(v) => setFormData({ ...formData, collection_id: v })}
                                 >
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Select Category" />
+                                        <SelectValue placeholder="Select Collection" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {categories.map((cat) => (
-                                            <SelectItem key={cat.id} value={cat.id}>
-                                                {cat.name}
+                                        {collections.map((col) => (
+                                            <SelectItem key={col.id} value={col.id}>
+                                                {col.name}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -476,6 +490,23 @@ export default function ProductManagement() {
                                         onClick={() => toggleSize(size)}
                                     >
                                         {size}
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Fabrics</label>
+                            <div className="flex flex-wrap gap-2">
+                                {availableFabrics.map((fabric) => (
+                                    <Button
+                                        key={fabric}
+                                        type="button"
+                                        variant={formData.fabrics.includes(fabric) ? "default" : "outline"}
+                                        size="sm"
+                                        onClick={() => toggleFabric(fabric)}
+                                    >
+                                        {fabric}
                                     </Button>
                                 ))}
                             </div>

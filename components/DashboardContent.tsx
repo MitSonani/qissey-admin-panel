@@ -23,7 +23,8 @@ import {
     ShoppingBag,
     Users,
     Package,
-    AlertTriangle
+    AlertTriangle,
+    Layers
 } from "lucide-react";
 import { DataTable } from "@/components/DataTable";
 import { Badge } from "@/components/ui/badge";
@@ -54,10 +55,12 @@ export default function DashboardContent() {
             const [
                 { count: productCount },
                 { count: customerCount },
+                { count: collectionCount },
                 { data: orders }
             ] = await Promise.all([
                 supabase.from("products").select("*", { count: "exact", head: true }),
                 supabase.from("customers").select("*", { count: "exact", head: true }),
+                supabase.from("collections").select("*", { count: "exact", head: true }),
                 supabase.from("orders").select("total_amount")
             ]);
 
@@ -80,10 +83,10 @@ export default function DashboardContent() {
                     trend: "+5% from yesterday"
                 },
                 {
-                    title: "Total Products",
-                    value: productCount || 0,
-                    icon: Package,
-                    description: "Active listings",
+                    title: "Total Collections",
+                    value: collectionCount || 0,
+                    icon: Layers, // I'll need to import Layers from lucide-react
+                    description: "Active product groups",
                 },
                 {
                     title: "Total Customers",

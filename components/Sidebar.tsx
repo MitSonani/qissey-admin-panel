@@ -23,7 +23,7 @@ const menuItems = [
     { icon: Box, label: "Products", href: "/products" },
     { icon: ShoppingCart, label: "Orders", href: "/orders" },
     { icon: Users, label: "Customers", href: "/customers" },
-    { icon: Layers, label: "Categories", href: "/categories" },
+    { icon: Layers, label: "Collections", href: "/collections" },
     { icon: Tag, label: "Coupons", href: "/coupons" },
     { icon: ClipboardList, label: "Inventory", href: "/inventory" },
 ];
