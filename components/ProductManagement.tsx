@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { DataTable } from "@/components/DataTable";
@@ -79,6 +79,7 @@ export default function ProductManagement() {
     const queryClient = useQueryClient();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+    const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [collectionFilter, setCollectionFilter] = useState("all");
 
@@ -100,14 +101,15 @@ export default function ProductManagement() {
     });
     const [pendingFiles, setPendingFiles] = useState<{ file: File; preview: string; color?: string }[]>([]);
 
-    // Fetch Products
-    const { data: products = [] } = useQuery({
+    // Fetch Products (Lightweight list version)
+    const { data: products = [], isLoading: isListLoading } = useQuery({
         queryKey: ["products", searchQuery, collectionFilter],
         queryFn: async () => {
             let query = supabase
                 .from("products")
-                .select("*, collection:collections(id, name), variants:product_variants(*)")
-                .order("created_at", { ascending: false });
+                .select("id, sku, name, price, discount_price, stock_quantity, status, collection_id, created_at, fabrics, collection:collections(id, name), variants:product_variants(image_urls)")
+                .order("created_at", { ascending: false })
+                .limit(1, { foreignTable: 'product_variants' });
 
             if (searchQuery) {
                 query = query.ilike("name", `%${searchQuery}%`);
@@ -120,14 +122,54 @@ export default function ProductManagement() {
             const { data, error } = await query;
             if (error) throw error;
 
-            // Map variants back to colors/sizes helpers for the form
             return (data as any[]).map(p => ({
                 ...p,
-                colors: Array.from(new Set(p.variants?.map((v: any) => v.color) || [])),
-                sizes: Array.from(new Set(p.variants?.map((v: any) => v.size) || []))
+                // Only keep small image for thumbnail
+                variants: p.variants?.slice(0, 1) || []
             })) as Product[];
         },
     });
+
+    // Fetch Full Product Details (On demand for editing)
+    const { data: productDetails, isFetching: isFetchingDetails } = useQuery({
+        queryKey: ["product-details", selectedProductId],
+        queryFn: async () => {
+            if (!selectedProductId) return null;
+            const { data, error } = await supabase
+                .from("products")
+                .select("*, collection:collections(id, name), variants:product_variants(*)")
+                .eq("id", selectedProductId)
+                .single();
+            if (error) throw error;
+
+            return {
+                ...data,
+                colors: Array.from(new Set(data.variants?.map((v: any) => v.color) || [])),
+                sizes: Array.from(new Set(data.variants?.map((v: any) => v.size) || []))
+            } as Product;
+        },
+        enabled: !!selectedProductId,
+    });
+
+    // Handle initial form population when editing
+    useEffect(() => {
+        if (productDetails && editingProduct && selectedProductId === editingProduct.id) {
+            setFormData({
+                sku: productDetails.sku || "",
+                name: productDetails.name,
+                description: productDetails.description || "",
+                price: productDetails.price.toString(),
+                discount_price: productDetails.discount_price?.toString() || "",
+                collection_id: productDetails.collection_id || "",
+                stock_quantity: productDetails.stock_quantity.toString(),
+                status: productDetails.status,
+                fabrics: productDetails.fabrics || [],
+                variants: productDetails.variants || [],
+                colors: productDetails.colors || [],
+                sizes: productDetails.sizes || [],
+            });
+        }
+    }, [productDetails, editingProduct, selectedProductId]);
 
     // Fetch Collections for dropdown
     const { data: collections = [] } = useQuery({
@@ -214,6 +256,7 @@ export default function ProductManagement() {
         });
         setPendingFiles([]);
         setEditingProduct(null);
+        setSelectedProductId(null);
     };
 
     const handleOpenCreate = () => {
@@ -223,19 +266,21 @@ export default function ProductManagement() {
 
     const handleOpenEdit = (product: Product) => {
         setEditingProduct(product);
+        setSelectedProductId(product.id);
+        // Clear old form data first
         setFormData({
             sku: product.sku || "",
             name: product.name,
-            description: product.description || "",
+            description: "",
             price: product.price.toString(),
             discount_price: product.discount_price?.toString() || "",
             collection_id: product.collection_id || "",
             stock_quantity: product.stock_quantity.toString(),
             status: product.status,
             fabrics: product.fabrics || [],
-            variants: product.variants || [],
-            colors: product.colors || [],
-            sizes: product.sizes || [],
+            variants: [],
+            colors: [],
+            sizes: [],
         });
         setPendingFiles([]);
         setIsDialogOpen(true);
@@ -581,7 +626,7 @@ export default function ProductManagement() {
                 </Select>
             </div>
 
-            <DataTable columns={columns} data={products} />
+            <DataTable columns={columns} data={products} loading={isListLoading} />
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="max-w-[1600px] sm:max-w-none w-[98vw] h-[95vh] max-h-[95vh] p-0 border-none shadow-2xl flex flex-col bg-background overflow-hidden rounded-[1.5rem]">
@@ -590,6 +635,12 @@ export default function ProductManagement() {
                             <DialogTitle className="text-xl font-semibold text-primary">
                                 {editingProduct ? "Edit Product" : "Add New Product"}
                             </DialogTitle>
+                            {isFetchingDetails && (
+                                <div className="flex items-center gap-2 text-sm text-primary animate-pulse">
+                                    <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                    Loading details...
+                                </div>
+                            )}
                         </div>
                     </DialogHeader>
 

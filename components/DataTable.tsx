@@ -19,14 +19,18 @@ import {
     Cell
 } from "@tanstack/react-table";
 
+import { Loader2 } from "lucide-react";
+
 interface DataTableProps<TData, TValue> {
     columns: ColumnDef<TData, TValue>[];
     data: TData[];
+    loading?: boolean;
 }
 
 export function DataTable<TData, TValue>({
     columns,
     data,
+    loading,
 }: DataTableProps<TData, TValue>) {
     const table = useReactTable({
         data,
@@ -56,7 +60,16 @@ export function DataTable<TData, TValue>({
                     ))}
                 </TableHeader>
                 <TableBody>
-                    {table.getRowModel().rows?.length ? (
+                    {loading ? (
+                        <TableRow>
+                            <TableCell colSpan={columns.length} className="h-24">
+                                <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                                    <Loader2 className="h-5 w-5 animate-spin" />
+                                    <span>Loading data...</span>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    ) : table.getRowModel().rows?.length ? (
                         table.getRowModel().rows.map((row: Row<TData>) => (
                             <TableRow
                                 key={row.id}
