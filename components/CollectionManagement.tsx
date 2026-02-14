@@ -285,7 +285,15 @@ export default function CollectionManagement() {
         {
             accessorKey: "created_at",
             header: "Created At",
-            cell: ({ row }: { row: { getValue: (key: string) => string } }) => format(new Date(row.getValue("created_at")), "MMM dd, yyyy"),
+            cell: ({ row }: { row: { getValue: (key: string) => string } }) => {
+                const dateValue = row.getValue("created_at");
+                if (!dateValue) return "N/A";
+                try {
+                    return format(new Date(dateValue), "MMM dd, yyyy");
+                } catch {
+                    return "Invalid date";
+                }
+            },
         },
         {
             id: "actions",
