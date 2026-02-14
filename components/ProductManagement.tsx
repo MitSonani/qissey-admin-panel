@@ -73,6 +73,7 @@ type Product = {
     fabrics: string[];
     stock_quantity: number;
     status: "active" | "inactive";
+    complete_the_look?: string[];
     // Derived/Local only (not in DB)
     sizes?: string[];
     colors?: ColorItem[];
@@ -100,6 +101,7 @@ export default function ProductManagement() {
         stock_quantity: "",
         status: "active" as "active" | "inactive",
         fabrics: [] as string[],
+        complete_the_look: [] as string[],
         variants: [] as Variant[],
         // Form session helpers (not saved to product table)
         colors: [] as ColorItem[],
@@ -196,6 +198,7 @@ export default function ProductManagement() {
                 stock_quantity: productDetails.stock_quantity.toString(),
                 status: productDetails.status,
                 fabrics: productDetails.fabrics || [],
+                complete_the_look: productDetails.complete_the_look || [],
                 variants: productDetails.variants || [],
                 colors: productDetails.colors || [],
                 sizes: productDetails.sizes || [],
@@ -295,6 +298,7 @@ export default function ProductManagement() {
             stock_quantity: "",
             status: "active",
             fabrics: [],
+            complete_the_look: [],
             variants: [],
             colors: [],
             sizes: [],
@@ -323,6 +327,7 @@ export default function ProductManagement() {
             stock_quantity: product.stock_quantity.toString(),
             status: product.status,
             fabrics: product.fabrics || [],
+            complete_the_look: [],
             variants: [],
             colors: [],
             sizes: [],
@@ -383,6 +388,7 @@ export default function ProductManagement() {
                 collection_id: formData.collection_id || null,
                 fabrics: formData.fabrics,
                 status: formData.status,
+                complete_the_look: formData.complete_the_look,
                 stock_quantity: currentVariants.reduce((acc, v) => acc + v.stock_quantity, 0),
             };
 
@@ -842,6 +848,88 @@ export default function ProductManagement() {
                                             className="h-10 bg-muted/30 border border-muted-foreground/10 rounded-md"
                                         />
                                     </div>
+                                </div>
+                            </div>
+
+                            <Separator className="opacity-40" />
+
+
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
+                                <div className="lg:col-span-4 space-y-2">
+                                    <h3 className="text-lg font-semibold">Complete the Look</h3>
+                                    <p className="text-sm text-muted-foreground">Select related products to suggest</p>
+                                </div>
+
+                                <div className="lg:col-span-8 space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-foreground/80">Related Products</label>
+                                        <Select
+                                            value=""
+                                            onValueChange={(productId) => {
+                                                if (!formData.complete_the_look.includes(productId)) {
+                                                    setFormData({
+                                                        ...formData,
+                                                        complete_the_look: [...formData.complete_the_look, productId]
+                                                    });
+                                                }
+                                            }}
+                                        >
+                                            <SelectTrigger className="h-10 bg-muted/30 border border-muted-foreground/10 rounded-md">
+                                                <SelectValue placeholder="Select products to add..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {products
+                                                    .filter(p => p.id !== editingProduct?.id && !formData.complete_the_look.includes(p.id))
+                                                    .map((product) => {
+                                                        const primaryImage = product.variants?.[0]?.image_urls?.[0];
+                                                        return (
+                                                            <SelectItem key={product.id} value={product.id}>
+                                                                <div className="flex items-center gap-2">
+                                                                    {primaryImage && (
+                                                                        <div className="w-8 h-10 rounded overflow-hidden border flex-shrink-0">
+                                                                            <Image src={primaryImage} alt="" width={32} height={40} className="object-cover w-full h-full" />
+                                                                        </div>
+                                                                    )}
+                                                                    <span className="truncate">{product.name}</span>
+                                                                </div>
+                                                            </SelectItem>
+                                                        );
+                                                    })}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {formData.complete_the_look.length > 0 && (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                            {formData.complete_the_look.map((productId) => {
+                                                const product = products.find(p => p.id === productId);
+                                                if (!product) return null;
+                                                const primaryImage = product.variants?.[0]?.image_urls?.[0];
+                                                return (
+                                                    <div key={productId} className="group relative aspect-[3/4] rounded-xl border overflow-hidden bg-muted/20">
+                                                        {primaryImage && (
+                                                            <Image src={primaryImage} alt={product.name} fill className="object-cover" />
+                                                        )}
+                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-3">
+                                                            <p className="text-white text-xs font-medium line-clamp-2">{product.name}</p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setFormData({
+                                                                    ...formData,
+                                                                    complete_the_look: formData.complete_the_look.filter(id => id !== productId)
+                                                                });
+                                                            }}
+                                                            className="absolute top-2 right-2 h-6 w-6 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
+                                                        >
+                                                            <X size={12} />
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

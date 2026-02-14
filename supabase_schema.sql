@@ -28,6 +28,7 @@ CREATE TABLE products (
   fabrics TEXT[] DEFAULT '{}', 
   stock_quantity INTEGER NOT NULL DEFAULT 0,
   status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  complete_the_look UUID[] DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
