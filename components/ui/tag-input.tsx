@@ -45,9 +45,14 @@ export function TagInput({ placeholder, tags, setTags }: TagInputProps) {
                     onKeyDown={handleKeyDown}
                     className="pr-10 focus-visible:ring-1 focus-visible:ring-primary/50 transition-all border-muted-foreground/20 hover:border-muted-foreground/40"
                 />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors cursor-default" title="Press Enter to add">
+                <button
+                    type="button"
+                    onClick={addTag}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-primary transition-colors cursor-pointer p-1 rounded-md hover:bg-primary/5 group-hover:text-muted-foreground"
+                    title="Click or press Enter to add"
+                >
                     <Plus className="h-4 w-4" />
-                </div>
+                </button>
             </div>
 
             {tags.length > 0 && (
