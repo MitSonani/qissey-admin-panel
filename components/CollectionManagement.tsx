@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { DataTable } from "@/components/DataTable";
@@ -13,12 +13,13 @@ import {
     DialogTitle,
     DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Loader2, Upload, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Upload, X, Palette, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { uploadProductImage } from "@/lib/storage";
 import Image from "next/image";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Collection = {
     id: string;
@@ -28,12 +29,28 @@ type Collection = {
     created_at: string;
 };
 
+type Color = {
+    id: string;
+    name: string;
+    hex: string;
+    created_at: string;
+};
+
 export default function CollectionManagement() {
     const queryClient = useQueryClient();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isColorDialogOpen, setIsColorDialogOpen] = useState(false);
     const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
+    const [editingColor, setEditingColor] = useState<Color | null>(null);
     const [formData, setFormData] = useState({ name: "", description: "", image_url: "" });
+    const [colorFormData, setColorFormData] = useState({ name: "", hex: "#000000" });
     const [pendingFile, setPendingFile] = useState<{ file: File; preview: string } | null>(null);
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        const timer = setTimeout(() => setIsMounted(true), 0);
+        return () => clearTimeout(timer);
+    }, []);
 
     // Fetch Collections
     const { data: collections = [] } = useQuery({
@@ -91,6 +108,77 @@ export default function CollectionManagement() {
         },
     });
 
+    // Fetch Colors
+    const { data: colors = [], isLoading: isColorsLoading } = useQuery({
+        queryKey: ["colors"],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from("colors")
+                .select("*")
+                .order("name", { ascending: true });
+            if (error) throw error;
+            return data as Color[];
+        },
+    });
+
+    // Create Color
+    const createColorMutation = useMutation({
+        mutationFn: async (newColor: { name: string; hex: string }) => {
+            const { data, error } = await supabase
+                .from("colors")
+                .insert(newColor)
+                .select();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["colors"] });
+            toast.success("Color added to library");
+            setIsColorDialogOpen(false);
+            resetColorForm();
+        },
+        onError: (error: Error) => {
+            toast.error(error.message || "Failed to add color");
+        },
+    });
+
+    // Update Color
+    const updateColorMutation = useMutation({
+        mutationFn: async ({ id, updates }: { id: string; updates: Partial<Color> }) => {
+            const { data, error } = await supabase
+                .from("colors")
+                .update(updates)
+                .eq("id", id)
+                .select();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["colors"] });
+            toast.success("Color updated successfully");
+            setIsColorDialogOpen(false);
+            resetColorForm();
+        },
+        onError: (error: Error) => {
+            toast.error(error.message || "Failed to update color");
+        },
+    });
+
+    // Delete Color
+    const deleteColorMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase.from("colors").delete().eq("id", id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["colors"] });
+            toast.success("Color deleted from library");
+        },
+        onError: (error: Error) => {
+            toast.error(error.message || "Failed to delete color");
+        },
+    });
+
     const resetForm = () => {
         setEditingCollection(null);
         setFormData({ name: "", description: "", image_url: "" });
@@ -98,6 +186,11 @@ export default function CollectionManagement() {
             URL.revokeObjectURL(pendingFile.preview);
             setPendingFile(null);
         }
+    };
+
+    const resetColorForm = () => {
+        setEditingColor(null);
+        setColorFormData({ name: "", hex: "#000000" });
     };
 
     // Delete Collection
@@ -124,6 +217,16 @@ export default function CollectionManagement() {
             image_url: collection.image_url || "",
         });
         setIsDialogOpen(true);
+    };
+
+    const handleOpenColorEdit = (color: Color) => {
+        resetColorForm();
+        setEditingColor(color);
+        setColorFormData({
+            name: color.name,
+            hex: color.hex,
+        });
+        setIsColorDialogOpen(true);
     };
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,7 +262,7 @@ export default function CollectionManagement() {
             } else {
                 createMutation.mutate(payload);
             }
-        } catch (error) {
+        } catch {
             toast.error("Upload failed", { id: "upload" });
         }
     };
@@ -214,23 +317,110 @@ export default function CollectionManagement() {
         },
     ];
 
+    const colorColumns: ColumnDef<Color>[] = [
+        {
+            id: "color-preview",
+            accessorKey: "hex",
+            header: "Preview",
+            cell: ({ row }: { row: { original: Color } }) => (
+                <div
+                    className="h-8 w-8 rounded-full border shadow-sm"
+                    style={{ backgroundColor: row.original.hex }}
+                />
+            )
+        },
+        {
+            accessorKey: "name",
+            header: "Color Name",
+            cell: ({ row }: { row: { original: Color } }) => <span className="font-medium uppercase">{row.original.name}</span>,
+        },
+        {
+            id: "color-hex",
+            accessorKey: "hex",
+            header: "Hex Code",
+            cell: ({ row }: { row: { original: Color } }) => <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{row.original.hex}</code>,
+        },
+        {
+            id: "actions",
+            header: "Actions",
+            cell: ({ row }: { row: { original: Color } }) => (
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleOpenColorEdit(row.original)}
+                        className="hover:text-primary"
+                    >
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                            if (confirm("Are you sure? This will delete the color from the global library.")) {
+                                deleteColorMutation.mutate(row.original.id);
+                            }
+                        }}
+                        className="hover:text-destructive"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                </div>
+            ),
+        },
+    ];
+
+    if (!isMounted) return <div className="min-h-[400px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
+
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Collections</h1>
-                    <p className="text-muted-foreground">Manage your product collections</p>
-                </div>
-                <Button onClick={() => {
-                    resetForm();
-                    setIsDialogOpen(true);
-                }} className="flex items-center gap-2">
-                    <Plus className="h-4 w-4" />
-                    New Collection
-                </Button>
-            </div>
+            <Tabs defaultValue="collections" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 max-w-[400px] mb-8 bg-muted/50 p-1">
+                    <TabsTrigger value="collections" className="flex items-center gap-2">
+                        <LayoutGrid size={14} />
+                        Collections
+                    </TabsTrigger>
+                    <TabsTrigger value="colors" className="flex items-center gap-2">
+                        <Palette size={14} />
+                        Color Library
+                    </TabsTrigger>
+                </TabsList>
 
-            <DataTable columns={columns} data={collections} />
+                <TabsContent value="collections" className="space-y-6 outline-none">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-3xl font-bold tracking-tight">Collections</h1>
+                            <p className="text-muted-foreground">Manage your product collections</p>
+                        </div>
+                        <Button onClick={() => {
+                            resetForm();
+                            setIsDialogOpen(true);
+                        }} className="flex items-center gap-2">
+                            <Plus className="h-4 w-4" />
+                            New Collection
+                        </Button>
+                    </div>
+
+                    <DataTable columns={columns} data={collections} />
+                </TabsContent>
+
+                <TabsContent value="colors" className="space-y-6 outline-none">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold tracking-tight text-foreground/90">Color Library</h2>
+                            <p className="text-sm text-muted-foreground">Standardized colors for product variants</p>
+                        </div>
+                        <Button onClick={() => {
+                            resetColorForm();
+                            setIsColorDialogOpen(true);
+                        }} variant="outline" className="flex items-center gap-2 border-primary/20 hover:bg-primary/5">
+                            <Plus className="h-4 w-4 text-primary" />
+                            Add Color
+                        </Button>
+                    </div>
+                    <DataTable columns={colorColumns} data={colors} loading={isColorsLoading} />
+                </TabsContent>
+            </Tabs>
 
             <Dialog open={isDialogOpen} onOpenChange={(open) => {
                 if (!open) resetForm();
@@ -306,6 +496,72 @@ export default function CollectionManagement() {
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 )}
                                 {editingCollection ? "Update" : "Create"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isColorDialogOpen} onOpenChange={(open) => {
+                if (!open) resetColorForm();
+                setIsColorDialogOpen(open);
+            }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            {editingColor ? "Edit Color" : "Add New Color"}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <form
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            if (editingColor) {
+                                updateColorMutation.mutate({ id: editingColor.id, updates: colorFormData });
+                            } else {
+                                createColorMutation.mutate(colorFormData);
+                            }
+                        }}
+                        className="space-y-4 py-4"
+                    >
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-foreground/80">Color Name</label>
+                            <Input
+                                required
+                                placeholder="e.g. Midnight Black"
+                                value={colorFormData.name}
+                                onChange={(e) => setColorFormData({ ...colorFormData, name: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-foreground/80">Color value</label>
+                            <div className="flex gap-4 items-center">
+
+                                <Input
+                                    type="color"
+                                    className="w-12 h-10 p-0 overflow-hidden cursor-pointer border-none bg-transparent"
+                                    value={colorFormData.hex}
+                                    onChange={(e) => setColorFormData({ ...colorFormData, hex: e.target.value })}
+                                />
+                                <Input
+                                    placeholder="#000000"
+                                    value={colorFormData.hex}
+                                    onChange={(e) => setColorFormData({ ...colorFormData, hex: e.target.value })}
+                                    className="font-mono"
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setIsColorDialogOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={createColorMutation.isPending || updateColorMutation.isPending}
+                            >
+                                {(createColorMutation.isPending || updateColorMutation.isPending) && (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                )}
+                                {editingColor ? "Update Color" : "Add to Library"}
                             </Button>
                         </DialogFooter>
                     </form>

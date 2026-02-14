@@ -1,3 +1,11 @@
+-- Colors Table
+CREATE TABLE colors (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  hex TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Collections Table
 CREATE TABLE collections (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -28,12 +36,13 @@ CREATE TABLE products (
 CREATE TABLE product_variants (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-  color TEXT NOT NULL,
+  color_id UUID REFERENCES colors(id) ON DELETE SET NULL,
   size TEXT NOT NULL,
   sku TEXT UNIQUE,
   price NUMERIC(10, 2), -- Overrides product price if set
   stock_quantity INTEGER NOT NULL DEFAULT 0,
   image_urls TEXT[] DEFAULT '{}',
+  is_primary BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
