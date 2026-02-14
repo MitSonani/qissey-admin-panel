@@ -29,7 +29,9 @@ import {
     Upload,
     X,
     Search,
-    Package
+    Package,
+    Image as ImageIcon,
+    Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
@@ -43,6 +45,17 @@ type Collection = {
     name: string;
 };
 
+type Variant = {
+    id?: string;
+    product_id?: string;
+    color: string;
+    size: string;
+    sku: string;
+    price: number | null;
+    stock_quantity: number;
+    image_urls: string[];
+};
+
 type Product = {
     id: string;
     sku: string | null;
@@ -51,14 +64,15 @@ type Product = {
     price: number;
     discount_price: number | null;
     collection_id: string | null;
-    sizes: string[];
-    colors: string[];
     fabrics: string[];
     stock_quantity: number;
-    image_urls: string[];
     status: "active" | "inactive";
+    // Derived/Local only (not in DB)
+    sizes?: string[];
+    colors?: string[];
     created_at: string;
     collection?: Collection;
+    variants?: Variant[];
 };
 
 export default function ProductManagement() {
@@ -78,12 +92,13 @@ export default function ProductManagement() {
         collection_id: "",
         stock_quantity: "",
         status: "active" as "active" | "inactive",
-        image_urls: [] as string[],
-        sizes: [] as string[],
         fabrics: [] as string[],
+        variants: [] as Variant[],
+        // Form session helpers (not saved to product table)
         colors: [] as string[],
+        sizes: [] as string[],
     });
-    const [pendingFiles, setPendingFiles] = useState<{ file: File; preview: string }[]>([]);
+    const [pendingFiles, setPendingFiles] = useState<{ file: File; preview: string; color?: string }[]>([]);
 
     // Fetch Products
     const { data: products = [] } = useQuery({
@@ -91,7 +106,7 @@ export default function ProductManagement() {
         queryFn: async () => {
             let query = supabase
                 .from("products")
-                .select("*, collection:collections(id, name)")
+                .select("*, collection:collections(id, name), variants:product_variants(*)")
                 .order("created_at", { ascending: false });
 
             if (searchQuery) {
@@ -104,7 +119,13 @@ export default function ProductManagement() {
 
             const { data, error } = await query;
             if (error) throw error;
-            return data as Product[];
+
+            // Map variants back to colors/sizes helpers for the form
+            return (data as any[]).map(p => ({
+                ...p,
+                colors: Array.from(new Set(p.variants?.map((v: any) => v.color) || [])),
+                sizes: Array.from(new Set(p.variants?.map((v: any) => v.size) || []))
+            })) as Product[];
         },
     });
 
@@ -186,10 +207,10 @@ export default function ProductManagement() {
             collection_id: "",
             stock_quantity: "",
             status: "active",
-            image_urls: [],
-            sizes: [],
             fabrics: [],
+            variants: [],
             colors: [],
+            sizes: [],
         });
         setPendingFiles([]);
         setEditingProduct(null);
@@ -211,10 +232,10 @@ export default function ProductManagement() {
             collection_id: product.collection_id || "",
             stock_quantity: product.stock_quantity.toString(),
             status: product.status,
-            image_urls: product.image_urls || [],
-            sizes: product.sizes || [],
             fabrics: product.fabrics || [],
+            variants: product.variants || [],
             colors: product.colors || [],
+            sizes: product.sizes || [],
         });
         setPendingFiles([]);
         setIsDialogOpen(true);
@@ -223,76 +244,220 @@ export default function ProductManagement() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        let finalImageUrls = [...formData.image_urls];
+        // 1. Validation: If colors exist, ensure variants are added
+        if (formData.colors.length > 0 && formData.variants.length === 0) {
+            toast.error("Please add at least one variant for your chosen colors");
+            return;
+        }
 
         try {
+            // Use a local copy of variants to avoid stale state issues with React's async setFormData
+            let currentVariants = [...formData.variants];
+
             if (pendingFiles.length > 0) {
                 toast.loading(`Uploading ${pendingFiles.length} images...`, { id: "upload" });
-                const uploadPromises = pendingFiles.map(pf => uploadProductImage(pf.file));
-                const uploadedUrls = await Promise.all(uploadPromises);
-                finalImageUrls = [...finalImageUrls, ...uploadedUrls];
+                const uploadPromises = pendingFiles.map(async (pf) => {
+                    const url = await uploadProductImage(pf.file);
+                    return { url, color: pf.color };
+                });
+                const uploadedResults = await Promise.all(uploadPromises);
+
+                // Update our local variants copy with the new image URLs
+                uploadedResults.forEach(result => {
+                    if (result.color) {
+                        currentVariants = currentVariants.map(v => {
+                            if (v.color === result.color) {
+                                return {
+                                    ...v,
+                                    image_urls: v.image_urls.includes(result.url)
+                                        ? v.image_urls
+                                        : [...v.image_urls, result.url]
+                                };
+                            }
+                            return v;
+                        });
+                    }
+                });
+
+                // Also update the form state for UI consistency (though we'll reset it soon)
+                setFormData(prev => ({ ...prev, variants: currentVariants }));
                 toast.success("All images uploaded", { id: "upload" });
             }
 
-            const payload = {
-                ...formData,
-                image_urls: finalImageUrls,
+            const productPayload = {
+                sku: formData.sku,
+                name: formData.name,
+                description: formData.description,
                 price: parseFloat(formData.price),
                 discount_price: formData.discount_price ? parseFloat(formData.discount_price) : null,
-                stock_quantity: parseInt(formData.stock_quantity),
+                collection_id: formData.collection_id || null,
+                fabrics: formData.fabrics,
+                status: formData.status,
+                stock_quantity: currentVariants.reduce((acc, v) => acc + v.stock_quantity, 0),
             };
 
+            let productId = editingProduct?.id;
+
             if (editingProduct) {
-                updateMutation.mutate({ id: editingProduct.id, updates: payload as Partial<Product> });
+                const { error } = await supabase
+                    .from("products")
+                    .update(productPayload)
+                    .eq("id", editingProduct.id);
+                if (error) throw error;
             } else {
-                createMutation.mutate(payload as Partial<Product>);
+                const { data, error } = await supabase
+                    .from("products")
+                    .insert([productPayload])
+                    .select()
+                    .single();
+                if (error) throw error;
+                productId = data.id;
             }
+
+            if (productId) {
+                // Handle Variants
+                // 1. Clear existing variants for this product to avoid duplicates or conflicts
+                const { error: deleteError } = await supabase
+                    .from("product_variants")
+                    .delete()
+                    .eq("product_id", productId);
+                if (deleteError) throw deleteError;
+
+                // 2. Insert new/updated variants from our local currentVariants copy
+                const variantsToInsert = currentVariants.map(v => ({
+                    product_id: productId,
+                    color: v.color,
+                    size: v.size,
+                    sku: v.sku,
+                    price: v.price,
+                    stock_quantity: v.stock_quantity,
+                    image_urls: v.image_urls
+                }));
+
+                if (variantsToInsert.length > 0) {
+                    const { error: variantError } = await supabase
+                        .from("product_variants")
+                        .insert(variantsToInsert);
+                    if (variantError) throw variantError;
+                }
+            }
+
+            queryClient.invalidateQueries({ queryKey: ["products"] });
+            toast.success(editingProduct ? "Product updated" : "Product created");
+            setIsDialogOpen(false);
+            resetForm();
         } catch (error) {
             const message = error instanceof Error ? error.message : "Submission failed";
             toast.error(message, { id: "upload" });
         }
     };
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, color?: string) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
 
         const newPending = Array.from(files).map(file => ({
             file,
-            preview: URL.createObjectURL(file)
+            preview: URL.createObjectURL(file),
+            color: color // Associate with a color if provided
         }));
 
         setPendingFiles(prev => [...prev, ...newPending]);
     };
 
-    const removeImage = (index: number) => {
-        const totalExisting = formData.image_urls.length;
-        if (index < totalExisting) {
-            setFormData(prev => ({
-                ...prev,
-                image_urls: prev.image_urls.filter((_, i) => i !== index),
-            }));
-        } else {
-            const pendingIndex = index - totalExisting;
-            setPendingFiles(prev => {
-                const newPending = [...prev];
-                URL.revokeObjectURL(newPending[pendingIndex].preview);
-                newPending.splice(pendingIndex, 1);
-                return newPending;
-            });
-        }
+    const removeColorImage = (color: string, urlToRemove: string) => {
+        setFormData(prev => ({
+            ...prev,
+            variants: prev.variants.map(v => {
+                if (v.color === color) {
+                    return {
+                        ...v,
+                        image_urls: v.image_urls.filter(url => url !== urlToRemove)
+                    };
+                }
+                return v;
+            })
+        }));
     };
 
-    const setSizes = (sizes: string[]) => setFormData((prev) => ({ ...prev, sizes }));
+    const setSizes = (sizes: string[]) => {
+        setFormData((prev) => {
+            const newSizes = sizes;
+            // 1. Filter out variants whose size is no longer present
+            let newVariants = prev.variants.filter(v => newSizes.includes(v.size));
+
+            // 2. For each size, ensure all defined colors have a variant
+            newSizes.forEach(size => {
+                prev.colors.forEach(color => {
+                    const exists = newVariants.find(v => v.color === color && v.size === size);
+                    if (!exists) {
+                        newVariants.push({
+                            color,
+                            size,
+                            sku: `${prev.sku ? prev.sku + "-" : ""}${color.substring(0, 3).toUpperCase()}-${size.substring(0, 3).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+                            price: null,
+                            stock_quantity: 0,
+                            image_urls: []
+                        });
+                    }
+                });
+            });
+
+            return { ...prev, sizes: newSizes, variants: newVariants };
+        });
+    };
+
     const setFabrics = (fabrics: string[]) => setFormData((prev) => ({ ...prev, fabrics }));
-    const setColors = (colors: string[]) => setFormData((prev) => ({ ...prev, colors }));
+
+    const setColors = (colors: string[]) => {
+        setFormData((prev) => {
+            const newColors = colors;
+            // 1. Filter out variants whose color is no longer present
+            let newVariants = prev.variants.filter(v => newColors.includes(v.color));
+
+            // 2. For each color, ensure all defined sizes have a variant
+            newColors.forEach(color => {
+                prev.sizes.forEach(size => {
+                    const exists = newVariants.find(v => v.color === color && v.size === size);
+                    if (!exists) {
+                        newVariants.push({
+                            color,
+                            size,
+                            sku: `${prev.sku ? prev.sku + "-" : ""}${color.substring(0, 3).toUpperCase()}-${size.substring(0, 3).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+                            price: null,
+                            stock_quantity: 0,
+                            image_urls: []
+                        });
+                    }
+                });
+            });
+
+            return { ...prev, colors: newColors, variants: newVariants };
+        });
+    };
+
+
+    const updateVariant = (index: number, updates: Partial<Variant>) => {
+        setFormData(prev => {
+            const newVariants = [...prev.variants];
+            newVariants[index] = { ...newVariants[index], ...updates };
+            return { ...prev, variants: newVariants };
+        });
+    };
+
+    const removeVariant = (index: number) => {
+        setFormData(prev => ({
+            ...prev,
+            variants: prev.variants.filter((_, i) => i !== index)
+        }));
+    };
 
     const columns: ColumnDef<Product>[] = [
         {
-            accessorKey: "image_urls",
+            accessorKey: "variants",
             header: "Image",
             cell: ({ row }: { row: any }) => {
-                const url = row.original.image_urls?.[0];
+                const url = row.original.variants?.[0]?.image_urls?.[0];
                 return (
                     <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
                         {url ? (
@@ -364,7 +529,7 @@ export default function ProductManagement() {
                         variant="ghost"
                         size="icon"
                         onClick={() => {
-                            if (confirm("Delete this product?")) {
+                            if (window.confirm("Delete this product?")) {
                                 deleteMutation.mutate(row.original.id);
                             }
                         }}
@@ -486,23 +651,32 @@ export default function ProductManagement() {
                                                 onValueChange={(v: "active" | "inactive") => setFormData({ ...formData, status: v })}
                                             >
                                                 <SelectTrigger className="h-10 bg-muted/30 border border-muted-foreground/10 rounded-md">
-                                                    <SelectValue />
+                                                    <SelectValue placeholder="Select status" />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="active">Active</SelectItem>
-                                                    <SelectItem value="inactive">Draft</SelectItem>
+                                                    <SelectItem value="inactive">Inactive</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
                                     </div>
 
                                     <div className="space-y-2">
+                                        <label className="text-sm font-medium text-foreground/80">Materials (Fabrics)</label>
+                                        <TagInput
+                                            placeholder="Add fabric (e.g. Cotton, Silk)"
+                                            tags={formData.fabrics}
+                                            setTags={setFabrics}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
                                         <label className="text-sm font-medium text-foreground/80">Description</label>
                                         <textarea
-                                            placeholder="Product description..."
-                                            className="w-full min-h-[100px] rounded-md border border-muted-foreground/10 bg-muted/30 px-3 py-2 text-sm focus:bg-background transition-all resize-none"
+                                            placeholder="Write a compelling story about this product..."
                                             value={formData.description}
-                                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
+                                            className="w-full min-h-[120px] bg-muted/30 border border-muted-foreground/10 focus:bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none"
                                         />
                                     </div>
                                 </div>
@@ -557,87 +731,181 @@ export default function ProductManagement() {
 
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
                                 <div className="lg:col-span-4 space-y-2">
-
-                                    <h3 className="text-lg font-semibold">Specifications</h3>
+                                    <h3 className="text-lg font-semibold">Variants</h3>
+                                    <p className="text-sm text-muted-foreground">Manage colors, sizes and images</p>
                                 </div>
 
-                                <div className="lg:col-span-8 space-y-8">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="lg:col-span-8 space-y-12">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-muted/20 p-6 rounded-2xl border border-dashed">
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-foreground/80">Sizes</label>
+                                            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                                1. Define Available Colors
+                                            </label>
                                             <TagInput
-                                                placeholder="Add size"
+                                                placeholder="e.g. Red, Blue"
+                                                tags={formData.colors}
+                                                setTags={setColors}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                                2. Define Available Sizes
+                                            </label>
+                                            <TagInput
+                                                placeholder="e.g. S, M, L"
                                                 tags={formData.sizes}
                                                 setTags={setSizes}
                                             />
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium text-foreground/80">Materials</label>
-                                            <TagInput
-                                                placeholder="Add fabric"
-                                                tags={formData.fabrics}
-                                                setTags={setFabrics}
-                                            />
-                                        </div>
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-foreground/80">Colors</label>
-                                        <TagInput
-                                            placeholder="Add colors"
-                                            tags={formData.colors}
-                                            setTags={setColors}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
 
-                            <Separator className="opacity-40" />
-
-                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 pb-12">
-                                <div className="lg:col-span-4 space-y-2">
-
-                                    <h3 className="text-lg font-semibold">Product Images</h3>
-                                </div>
-
-                                <div className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
-                                    {formData.image_urls.map((url, i) => (
-                                        <div key={`existing-${i}`} className="group relative aspect-[3/4.5] rounded-2xl border-none overflow-hidden bg-muted/20 shadow-lg hover:shadow-2xl transition-all duration-700">
-                                            <Image src={url} alt="" fill className="object-cover transition-transform duration-1000 group-hover:scale-110" />
-                                            <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeImage(i)}
-                                                    className="h-10 w-10 rounded-full bg-destructive text-white flex items-center justify-center hover:scale-110 transition-transform"
-                                                >
-                                                    <X size={20} />
-                                                </button>
-                                            </div>
+                                    {formData.colors.length === 0 ? (
+                                        <div className="p-8 border rounded-xl border-dashed flex flex-col items-center justify-center text-center bg-muted/20">
+                                            <Package className="h-8 w-8 text-muted-foreground mb-4 opacity-20" />
+                                            <p className="text-sm font-medium">No colors added yet</p>
+                                            <p className="text-xs text-muted-foreground">Add colors in the Specifications section above to start creating variants.</p>
                                         </div>
-                                    ))}
-                                    {pendingFiles.map((pf, i) => (
-                                        <div key={`pending-${i}`} className="group relative aspect-[3/4.5] rounded-2xl border-none overflow-hidden bg-muted/20 shadow-lg hover:shadow-2xl transition-all duration-700">
-                                            <Image src={pf.preview} alt="" fill className="object-cover transition-transform duration-1000 group-hover:scale-110" />
-                                            <div className="absolute top-2 right-2 z-10">
-                                                <Badge className="bg-primary/90 text-[10px] uppercase tracking-tighter">Pending</Badge>
-                                            </div>
-                                            <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeImage(formData.image_urls.length + i)}
-                                                    className="h-10 w-10 rounded-full bg-destructive text-white flex items-center justify-center hover:scale-110 transition-transform"
-                                                >
-                                                    <X size={20} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <label className="aspect-[3/4.5] rounded-2xl border-4 border-dashed border-muted-foreground/10 flex flex-col items-center justify-center cursor-pointer hover:bg-muted/40 hover:border-primary/30 transition-all group active:scale-[0.98] duration-300">
-                                        <div className="p-6 rounded-xl bg-muted group-hover:bg-primary/5 transition-all duration-300">
-                                            <Upload className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
-                                        </div>
-                                        <span className="text-xs font-medium text-muted-foreground mt-4 group-hover:text-primary transition-colors">Upload Image</span>
-                                        <input type="file" hidden accept="image/*" multiple onChange={handleImageUpload} />
-                                    </label>
+                                    ) : (
+                                        formData.colors.map((color, colorIdx) => {
+                                            const colorVariants = formData.variants.filter(v => v.color === color);
+                                            return (
+                                                <div key={colorIdx} className="space-y-6 p-6 rounded-2xl border bg-muted/10">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-4 h-4 rounded-full border shadow-sm" style={{ backgroundColor: color.toLowerCase() }} />
+                                                            <h4 className="font-semibold text-base">{color}</h4>
+                                                            <Badge variant="secondary" className="ml-2">{colorVariants.length} Variants</Badge>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-4">
+                                                        {colorVariants.length === 0 ? (
+                                                            <p className="text-xs text-muted-foreground italic">No sizes added for this color yet.</p>
+                                                        ) : (
+                                                            <div className="grid grid-cols-1 gap-4">
+                                                                {formData.variants.map((v, vIdx) => {
+                                                                    if (v.color !== color) return null;
+                                                                    return (
+                                                                        <div key={vIdx} className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end bg-background p-4 rounded-xl border border-muted-foreground/10 shadow-sm relative group">
+                                                                            <div className="sm:col-span-2 space-y-1.5">
+                                                                                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Size</label>
+                                                                                <Select
+                                                                                    value={v.size}
+                                                                                    onValueChange={(val) => updateVariant(vIdx, { size: val })}
+                                                                                >
+                                                                                    <SelectTrigger className="h-9">
+                                                                                        <SelectValue placeholder="Size" />
+                                                                                    </SelectTrigger>
+                                                                                    <SelectContent>
+                                                                                        {formData.sizes.map(size => (
+                                                                                            <SelectItem key={size} value={size}>{size}</SelectItem>
+                                                                                        ))}
+                                                                                    </SelectContent>
+                                                                                </Select>
+                                                                            </div>
+                                                                            <div className="sm:col-span-4 space-y-1.5">
+                                                                                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">SKU (Optional)</label>
+                                                                                <Input
+                                                                                    placeholder="Variant SKU"
+                                                                                    className="h-9"
+                                                                                    value={v.sku}
+                                                                                    onChange={(e) => updateVariant(vIdx, { sku: e.target.value })}
+                                                                                />
+                                                                            </div>
+                                                                            <div className="sm:col-span-2 space-y-1.5">
+                                                                                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Stock</label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    placeholder="0"
+                                                                                    className="h-9"
+                                                                                    value={v.stock_quantity}
+                                                                                    onChange={(e) => updateVariant(vIdx, { stock_quantity: parseInt(e.target.value) || 0 })}
+                                                                                />
+                                                                            </div>
+                                                                            <div className="sm:col-span-3 space-y-1.5">
+                                                                                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Price Override</label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    placeholder="Base price"
+                                                                                    className="h-9"
+                                                                                    value={v.price || ""}
+                                                                                    onChange={(e) => updateVariant(vIdx, { price: e.target.value ? parseFloat(e.target.value) : null })}
+                                                                                />
+                                                                            </div>
+                                                                            <div className="sm:col-span-1 flex justify-end">
+                                                                                <Button
+                                                                                    type="button"
+                                                                                    variant="ghost"
+                                                                                    size="icon"
+                                                                                    onClick={() => removeVariant(vIdx)}
+                                                                                    className="h-9 w-9 text-muted-foreground hover:text-destructive transition-colors"
+                                                                                >
+                                                                                    <X className="h-4 w-4" />
+                                                                                </Button>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="space-y-3 pt-2">
+                                                        <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                                            <ImageIcon className="h-3 w-3" />
+                                                            {color} Images
+                                                        </label>
+                                                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+                                                            <label className="aspect-[3/4] rounded-xl border-2 border-dashed border-muted-foreground/10 flex flex-col items-center justify-center cursor-pointer hover:bg-background hover:border-primary/30 transition-all group active:scale-[0.98]">
+                                                                <Upload className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                                                                <input type="file" hidden accept="image/*" multiple onChange={(e) => handleImageUpload(e, color)} />
+                                                            </label>
+
+                                                            {/* Existing Images for this color */}
+                                                            {Array.from(new Set(formData.variants
+                                                                .filter(v => v.color === color)
+                                                                .flatMap(v => v.image_urls)
+                                                            )).map((url, i) => (
+                                                                <div key={`existing-${color}-${i}`} className="group relative aspect-[3/4] rounded-xl border-none overflow-hidden bg-muted/20 shadow-sm">
+                                                                    <Image src={url} alt="" fill className="object-cover" />
+                                                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => removeColorImage(color, url)}
+                                                                            className="h-7 w-7 rounded-full bg-destructive text-white flex items-center justify-center hover:scale-110 transition-transform"
+                                                                        >
+                                                                            <X size={14} />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+
+                                                            {/* Pending Images for this color */}
+                                                            {pendingFiles.filter(pf => pf.color === color).map((pf, i) => (
+                                                                <div key={`pending-${color}-${i}`} className="group relative aspect-[3/4] rounded-xl border-none overflow-hidden bg-muted/20 shadow-sm border-2 border-primary/20">
+                                                                    <Image src={pf.preview} alt="" fill className="object-cover" />
+                                                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setPendingFiles(prev => prev.filter((_, idx) => {
+                                                                                    const colorPending = prev.filter(p => p.color === color);
+                                                                                    const absoluteIdx = prev.indexOf(colorPending[i]);
+                                                                                    return idx !== absoluteIdx;
+                                                                                }));
+                                                                            }}
+                                                                            className="h-7 w-7 rounded-full bg-destructive text-white flex items-center justify-center hover:scale-110 transition-transform"
+                                                                        >
+                                                                            <X size={14} />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }))}
                                 </div>
                             </div>
                         </div>

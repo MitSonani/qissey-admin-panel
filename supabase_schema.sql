@@ -17,12 +17,23 @@ CREATE TABLE products (
   price NUMERIC(10, 2) NOT NULL DEFAULT 0,
   discount_price NUMERIC(10, 2),
   collection_id UUID REFERENCES collections(id) ON DELETE SET NULL,
-  sizes TEXT[] DEFAULT '{}',
-  colors TEXT[] DEFAULT '{}',
   fabrics TEXT[] DEFAULT '{}', 
   stock_quantity INTEGER NOT NULL DEFAULT 0,
-  image_urls TEXT[] DEFAULT '{}',
   status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Product Variants Table
+CREATE TABLE product_variants (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  color TEXT NOT NULL,
+  size TEXT NOT NULL,
+  sku TEXT UNIQUE,
+  price NUMERIC(10, 2), -- Overrides product price if set
+  stock_quantity INTEGER NOT NULL DEFAULT 0,
+  image_urls TEXT[] DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
