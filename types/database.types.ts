@@ -39,6 +39,7 @@ export interface Database {
                     stock_quantity: number
                     image_urls: string[]
                     status: 'active' | 'inactive'
+                    new_arrival: boolean
                     created_at: string
                 }
                 Insert: {
@@ -53,6 +54,7 @@ export interface Database {
                     stock_quantity: number
                     image_urls?: string[]
                     status?: 'active' | 'inactive'
+                    new_arrival?: boolean
                     created_at?: string
                 }
                 Update: {
@@ -67,6 +69,7 @@ export interface Database {
                     stock_quantity?: number
                     image_urls?: string[]
                     status?: 'active' | 'inactive'
+                    new_arrival?: boolean
                     created_at?: string
                 }
             }

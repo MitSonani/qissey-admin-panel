@@ -37,6 +37,8 @@ import { ColumnDef } from "@tanstack/react-table";
 import { uploadProductImage } from "@/lib/storage";
 import { TagInput } from "@/components/ui/tag-input";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import Image from "next/image";
 
 type Collection = {
@@ -73,6 +75,7 @@ type Product = {
     fabrics: string[];
     stock_quantity: number;
     status: "active" | "inactive";
+    new_arrival: boolean;
     complete_the_look?: string[];
     // Derived/Local only (not in DB)
     sizes?: string[];
@@ -100,6 +103,7 @@ export default function ProductManagement() {
         collection_id: "",
         stock_quantity: "",
         status: "active" as "active" | "inactive",
+        new_arrival: false,
         fabrics: [] as string[],
         complete_the_look: [] as string[],
         variants: [] as Variant[],
@@ -197,6 +201,7 @@ export default function ProductManagement() {
                 collection_id: productDetails.collection_id || "",
                 stock_quantity: productDetails.stock_quantity.toString(),
                 status: productDetails.status,
+                new_arrival: productDetails.new_arrival || false,
                 fabrics: productDetails.fabrics || [],
                 complete_the_look: productDetails.complete_the_look || [],
                 variants: productDetails.variants || [],
@@ -297,6 +302,7 @@ export default function ProductManagement() {
             collection_id: "",
             stock_quantity: "",
             status: "active",
+            new_arrival: false,
             fabrics: [],
             complete_the_look: [],
             variants: [],
@@ -326,6 +332,7 @@ export default function ProductManagement() {
             collection_id: product.collection_id || "",
             stock_quantity: product.stock_quantity.toString(),
             status: product.status,
+            new_arrival: product.new_arrival || false,
             fabrics: product.fabrics || [],
             complete_the_look: [],
             variants: [],
@@ -388,6 +395,7 @@ export default function ProductManagement() {
                 collection_id: formData.collection_id || null,
                 fabrics: formData.fabrics,
                 status: formData.status,
+                new_arrival: formData.new_arrival,
                 complete_the_look: formData.complete_the_look,
                 stock_quantity: currentVariants.reduce((acc, v) => acc + v.stock_quantity, 0),
             };
@@ -782,6 +790,21 @@ export default function ProductManagement() {
                                                     <SelectItem value="inactive">Inactive</SelectItem>
                                                 </SelectContent>
                                             </Select>
+                                        </div>
+                                        <div className="flex items-center space-x-2 pt-8">
+                                            <Checkbox
+                                                id="new_arrival"
+                                                checked={formData.new_arrival}
+                                                onCheckedChange={(checked) =>
+                                                    setFormData({ ...formData, new_arrival: checked as boolean })
+                                                }
+                                            />
+                                            <Label
+                                                htmlFor="new_arrival"
+                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                            >
+                                                New Arrival Product
+                                            </Label>
                                         </div>
                                     </div>
 

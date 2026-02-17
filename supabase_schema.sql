@@ -30,7 +30,8 @@ CREATE TABLE products (
   status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   complete_the_look UUID[] DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  new_arrival BOOLEAN DEFAULT FALSE
 );
 
 -- Product Variants Table
