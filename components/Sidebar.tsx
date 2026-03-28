@@ -15,8 +15,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { useState, useEffect } from "react";
 
 const menuItems = [
     { icon: Home, label: "Dashboard", href: "/" },
@@ -30,7 +31,45 @@ const menuItems = [
 
 export default function Sidebar() {
     const pathname = usePathname();
+    const router = useRouter();
     const [isCollapsed] = useState(false);
+    const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+
+    useEffect(() => {
+        const fetchUser = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('name, email')
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (profile) {
+                    setUser({
+                        name: profile.name || "Admin User",
+                        email: profile.email || session.user.email || "",
+                    });
+                } else {
+                    setUser({
+                        name: "Admin User",
+                        email: session.user.email || "",
+                    });
+                }
+            }
+        };
+
+        fetchUser();
+    }, []);
+
+    const getInitials = (name: string) => {
+        return name
+            .split(" ")
+            .map((n) => n[0])
+            .join("")
+            .toUpperCase()
+            .substring(0, 2);
+    };
 
     return (
         <aside className={cn(
@@ -39,9 +78,9 @@ export default function Sidebar() {
         )}>
             <div className="p-6 border-b flex items-center gap-3">
                 <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                    <span className="text-white font-bold">N</span>
+                    <span className="text-white font-bold">Q</span>
                 </div>
-                {!isCollapsed && <span className="font-bold text-xl tracking-tighter">NIHAL ADMIN</span>}
+                {!isCollapsed && <span className="font-bold text-xl tracking-tighter">QISSEY ADMIN</span>}
             </div>
 
             <nav className="flex-1 p-4 space-y-1">
@@ -71,21 +110,28 @@ export default function Sidebar() {
                     <Settings size={20} />
                     {!isCollapsed && <span>Settings</span>}
                 </button>
-                <button className="flex items-center gap-3 px-3 py-2 w-full text-destructive hover:bg-destructive/10 rounded-lg text-sm font-medium transition-colors">
+                <button
+                    onClick={async () => {
+                        await supabase.auth.signOut();
+                        router.push("/login");
+                        router.refresh();
+                    }}
+                    className="flex items-center gap-3 px-3 py-2 w-full text-destructive hover:bg-destructive/10 rounded-lg text-sm font-medium transition-colors"
+                >
                     <LogOut size={20} />
                     {!isCollapsed && <span>Log Out</span>}
                 </button>
             </div>
 
-            {!isCollapsed && (
+            {!isCollapsed && user && (
                 <div className="p-6 bg-muted/30">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                            <span className="text-primary font-bold">AD</span>
+                            <span className="text-primary font-bold">{getInitials(user.name)}</span>
                         </div>
                         <div className="flex flex-col min-w-0">
-                            <span className="text-sm font-semibold truncate">Admin User</span>
-                            <span className="text-xs text-muted-foreground truncate">admin@nihal.com</span>
+                            <span className="text-sm font-semibold truncate">{user.name}</span>
+                            <span className="text-xs text-muted-foreground truncate">{user.email}</span>
                         </div>
                         <ChevronDown size={14} className="text-muted-foreground ml-auto" />
                     </div>

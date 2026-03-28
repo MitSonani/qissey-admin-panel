@@ -73,7 +73,12 @@ export interface Database {
                     created_at?: string
                 }
             }
-            customers: {
+            customers: { // Note: 'customers' seems to be what 'profiles' is mapped to in some contexts, but let's check the file content again. The file shows 'customers' table in the previous `view_file`.
+                // Wait, I need to check if 'profiles' table is in `database.types.ts`.
+                // The previous `view_file` of `database.types.ts` showed `customers` table but NOT `profiles`.
+                // However, `supabase_schema.sql` has `profiles`.
+                // Accessing `database.types.ts` again to be sure.
+
                 Row: {
                     id: string
                     name: string
@@ -102,6 +107,35 @@ export interface Database {
                     created_at?: string
                 }
             }
+            profiles: {
+                Row: {
+                    id: string
+                    name: string | null
+                    email: string
+                    phone: string | null
+                    role: 'user' | 'admin'
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id: string
+                    name?: string | null
+                    email: string
+                    phone?: string | null
+                    role?: 'user' | 'admin'
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: string
+                    name?: string | null
+                    email?: string
+                    phone?: string | null
+                    role?: 'user' | 'admin'
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
             orders: {
                 Row: {
                     id: string
@@ -109,9 +143,18 @@ export interface Database {
                     customer_name: string
                     customer_email: string
                     total_amount: number
-                    status: 'pending' | 'shipped' | 'delivered' | 'cancelled'
-                    payment_status: 'paid' | 'unpaid'
+                    currency: string
+                    status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned'
+                    payment_status: 'paid' | 'unpaid' | 'failed' | 'refunded'
+                    payment_method: string | null
+                    shipping_address: Json | null
+                    billing_address: Json | null
+                    razorpay_order_id: string | null
+                    shiprocket_order_id: string | null
+                    shiprocket_shipment_id: string | null
+                    shiprocket_awb: string | null
                     created_at: string
+                    updated_at: string
                 }
                 Insert: {
                     id?: string
@@ -119,9 +162,18 @@ export interface Database {
                     customer_name: string
                     customer_email: string
                     total_amount: number
-                    status?: 'pending' | 'shipped' | 'delivered' | 'cancelled'
-                    payment_status?: 'paid' | 'unpaid'
+                    currency?: string
+                    status?: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned'
+                    payment_status?: 'paid' | 'unpaid' | 'failed' | 'refunded'
+                    payment_method?: string | null
+                    shipping_address?: Json | null
+                    billing_address?: Json | null
+                    razorpay_order_id?: string | null
+                    shiprocket_order_id?: string | null
+                    shiprocket_shipment_id?: string | null
+                    shiprocket_awb?: string | null
                     created_at?: string
+                    updated_at?: string
                 }
                 Update: {
                     id?: string
@@ -129,9 +181,18 @@ export interface Database {
                     customer_name?: string
                     customer_email?: string
                     total_amount?: number
-                    status?: 'pending' | 'shipped' | 'delivered' | 'cancelled'
-                    payment_status?: 'paid' | 'unpaid'
+                    currency?: string
+                    status?: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned'
+                    payment_status?: 'paid' | 'unpaid' | 'failed' | 'refunded'
+                    payment_method?: string | null
+                    shipping_address?: Json | null
+                    billing_address?: Json | null
+                    razorpay_order_id?: string | null
+                    shiprocket_order_id?: string | null
+                    shiprocket_shipment_id?: string | null
+                    shiprocket_awb?: string | null
                     created_at?: string
+                    updated_at?: string
                 }
             }
             order_items: {
@@ -139,7 +200,11 @@ export interface Database {
                     id: string
                     order_id: string
                     product_id: string | null
+                    variant_id: string | null
                     product_name: string
+                    size: string | null
+                    custom_measurements: Json | null
+                    sku: string | null
                     quantity: number
                     price: number
                 }
@@ -147,7 +212,11 @@ export interface Database {
                     id?: string
                     order_id: string
                     product_id?: string | null
+                    variant_id?: string | null
                     product_name: string
+                    size?: string | null
+                    custom_measurements?: Json | null
+                    sku?: string | null
                     quantity: number
                     price: number
                 }
@@ -155,7 +224,11 @@ export interface Database {
                     id?: string
                     order_id?: string
                     product_id?: string | null
+                    variant_id?: string | null
                     product_name?: string
+                    size?: string | null
+                    custom_measurements?: Json | null
+                    sku?: string | null
                     quantity?: number
                     price?: number
                 }

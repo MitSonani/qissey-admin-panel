@@ -23,30 +23,36 @@ import { Eye, Package } from "lucide-react";
 import { ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { Order } from "@/types/orders";
 
-type OrderItem = {
-    id: string;
-    product_id: string;
-    quantity: number;
-    price: number;
-    product?: { name: string };
-};
 
-type Order = {
-    id: string;
-    customer_name: string;
-    customer_email: string;
-    total_amount: number;
-    status: string;
-    payment_status: string;
-    created_at: string;
-    order_items: OrderItem[];
-};
 
 export default function OrderManagement() {
     const queryClient = useQueryClient();
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+
+
+
+    // Fetch User Role for Debugging
+    useQuery({
+        queryKey: ["userRole"],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                return null;
+            }
+
+            const { data: profile } = await supabase
+                .from("profiles")
+                .select("role")
+                .eq("id", user.id)
+                .single();
+
+
+            return profile;
+        }
+    });
 
     // Fetch Orders
     const { data: orders = [] } = useQuery({
@@ -56,7 +62,11 @@ export default function OrderManagement() {
                 .from("orders")
                 .select("*, order_items(*, product:products(name))")
                 .order("created_at", { ascending: false });
-            if (error) throw error;
+
+            if (error) {
+                console.error("Error fetching orders:", error);
+                throw error;
+            }
             return data as Order[];
         },
     });
@@ -79,6 +89,61 @@ export default function OrderManagement() {
         },
     });
 
+    // Shiprocket Fulfillment
+    const shiprocketMutation = useMutation({
+        mutationFn: async (order: Order) => {
+            const response = await fetch("/api/shiprocket", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    order,
+                    orderItems: order.order_items
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Fulfillment failed");
+            }
+
+            return response.json();
+        },
+        onSuccess: async (data, variables) => {
+            // Update the order in Supabase with the new details
+            const { error } = await supabase
+                .from("orders")
+                .update({
+                    shiprocket_order_id: data.shiprocket_order_id.toString(),
+                    shiprocket_shipment_id: data.shiprocket_shipment_id.toString(),
+                    shiprocket_awb: data.awb_code,
+                    status: "processing"
+                })
+                .eq("id", variables.id);
+
+            if (error) throw error;
+
+            queryClient.invalidateQueries({ queryKey: ["orders"] });
+
+            if (data.label_url) {
+                toast.success("Shiprocket fulfillment successful!", {
+                    description: "Shipping label is ready.",
+                    action: {
+                        label: "Open Label",
+                        onClick: () => window.open(data.label_url, "_blank")
+                    },
+                    duration: 10000
+                });
+            } else {
+                toast.success("Shiprocket order created and AWB assigned!");
+            }
+
+            setIsDetailsOpen(false);
+        },
+        onError: (error: Error) => {
+            toast.error(error.message || "Shiprocket fulfillment failed");
+        },
+    });
+
     const columns: ColumnDef<Order>[] = [
         {
             accessorKey: "id",
@@ -98,7 +163,11 @@ export default function OrderManagement() {
         {
             accessorKey: "total_amount",
             header: "Total",
-            cell: ({ row }) => `$${row.original.total_amount.toFixed(2)}`,
+            cell: ({ row }) => (
+                <div className="font-medium">
+                    {row.original.currency} {row.original.total_amount.toFixed(2)}
+                </div>
+            ),
         },
         {
             accessorKey: "status",
@@ -114,11 +183,12 @@ export default function OrderManagement() {
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="processing">Processing</SelectItem>
+                            <SelectItem value="pending">Processing</SelectItem>
                             <SelectItem value="shipped">Shipped</SelectItem>
+                            <SelectItem value="processing">INTRANSIT</SelectItem>
                             <SelectItem value="delivered">Delivered</SelectItem>
                             <SelectItem value="cancelled">Cancelled</SelectItem>
+                            <SelectItem value="returned">Returned</SelectItem>
                         </SelectContent>
                     </Select>
                 );
@@ -132,6 +202,19 @@ export default function OrderManagement() {
                     {row.original.payment_status}
                 </Badge>
             ),
+        },
+        {
+            accessorKey: "payment_method",
+            header: "Method",
+            cell: ({ row }) => {
+                const method = row.original.payment_method;
+                if (!method) return <span className="text-xs text-muted-foreground italic">N/A</span>;
+                return (
+                    <Badge variant="secondary" className="text-[10px] capitalize">
+                        {method.replace(/_/g, ' ')}
+                    </Badge>
+                );
+            },
         },
         {
             accessorKey: "created_at",
@@ -161,54 +244,191 @@ export default function OrderManagement() {
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
                 <p className="text-muted-foreground">Monitor and manage customer transactions</p>
+
             </div>
 
             <DataTable columns={columns} data={orders} />
 
             <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-                <DialogContent className="max-w-3xl">
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Order Details #{selectedOrder?.id.slice(0, 8)}</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-6 pt-4">
-                        <div className="grid grid-cols-2 gap-8 border-b pb-6">
-                            <div>
-                                <h4 className="text-sm font-semibold mb-2">Customer Information</h4>
-                                <p className="text-sm">{selectedOrder?.customer_name}</p>
-                                <p className="text-sm text-muted-foreground">{selectedOrder?.customer_email}</p>
+                    {selectedOrder && (
+                        <div className="space-y-6 pt-4">
+                            {/* Customer & Status Section */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-b pb-6">
+                                <div>
+                                    <h4 className="text-sm font-semibold mb-2">Customer Information</h4>
+                                    <div className="text-sm space-y-1">
+                                        <p><span className="font-medium">Name:</span> {selectedOrder.customer_name}</p>
+                                        <p><span className="font-medium">Email:</span> {selectedOrder.customer_email}</p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-semibold mb-2">Order Status</h4>
+                                    <div className="text-sm space-y-1">
+                                        <p><span className="font-medium">Placed on:</span> {format(new Date(selectedOrder.created_at), "PPP p")}</p>
+                                        <p><span className="font-medium">Status:</span> <span className="capitalize">{selectedOrder.status}</span></p>
+                                        <p><span className="font-medium">Payment:</span> <span className="capitalize">{selectedOrder.payment_status}</span></p>
+                                        {selectedOrder.payment_method && (
+                                            <p><span className="font-medium">Method:</span> {selectedOrder.payment_method}</p>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <h4 className="text-sm font-semibold mb-2">Order Information</h4>
-                                <p className="text-sm">Placed on: {selectedOrder ? format(new Date(selectedOrder.created_at), "PPP p") : ""}</p>
-                                <p className="text-sm">Status: <span className="capitalize">{selectedOrder?.status}</span></p>
-                            </div>
-                        </div>
 
-                        <div>
-                            <h4 className="text-sm font-semibold mb-4">Items</h4>
-                            <div className="space-y-3">
-                                {selectedOrder?.order_items.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-10 w-10 bg-muted rounded flex items-center justify-center">
-                                                <Package size={18} className="text-muted-foreground" />
+                            {/* Addresses Section */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-b pb-6">
+                                <div>
+                                    <h4 className="text-sm font-semibold mb-2">Shipping Address</h4>
+                                    {selectedOrder.shipping_address ? (
+                                        <div className="text-sm text-muted-foreground space-y-1 bg-muted/30 p-3 rounded-md border">
+                                            <p>{selectedOrder.shipping_address.line1}</p>
+                                            {selectedOrder.shipping_address.line2 && <p>{selectedOrder.shipping_address.line2}</p>}
+                                            <p>{selectedOrder.shipping_address.city}, {selectedOrder.shipping_address.state} {selectedOrder.shipping_address.postal_code}</p>
+                                            <p>{selectedOrder.shipping_address.country}</p>
+
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground">No shipping address provided</p>
+                                    )}
+                                </div>
+
+                            </div>
+
+                            {/* Tracking & Integration IDs */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-b pb-6">
+
+                                <div>
+                                    <h4 className="text-sm font-semibold mb-2">Shipment Details</h4>
+                                    <div className="text-sm space-y-1">
+                                        {selectedOrder.shiprocket_awb ? (
+                                            <>
+                                                <p><span className="font-medium">Shiprocket Order ID:</span> {selectedOrder.shiprocket_order_id}</p>
+                                                {selectedOrder.shiprocket_shipment_id && (
+                                                    <p><span className="font-medium">Shipment ID:</span> {selectedOrder.shiprocket_shipment_id}</p>
+                                                )}
+                                                {selectedOrder.shiprocket_awb && (
+                                                    <p><span className="font-medium">AWB:</span> {selectedOrder.shiprocket_awb}</p>
+                                                )}
+                                                <div className="pt-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="w-full justify-start gap-2 h-9 text-blue-600 hover:text-blue-700"
+                                                        onClick={() => shiprocketMutation.mutate(selectedOrder)}
+                                                        disabled={shiprocketMutation.isPending}
+                                                    >
+                                                        {shiprocketMutation.isPending ? (
+                                                            <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                                        ) : (
+                                                            <Package className="h-4 w-4" />
+                                                        )}
+                                                        Regenerate Label / Fetch Pickup
+                                                    </Button>
+                                                </div>
+                                            </>
+                                        ) : selectedOrder.shiprocket_shipment_id ? (
+                                            <div className="pt-2 space-y-2">
+                                                <p><span className="font-medium">Shiprocket Order ID:</span> {selectedOrder.shiprocket_order_id}</p>
+                                                <p><span className="font-medium">Shipment ID:</span> {selectedOrder.shiprocket_shipment_id}</p>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="w-full justify-start gap-2 h-9 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                                    onClick={() => shiprocketMutation.mutate(selectedOrder)}
+                                                    disabled={shiprocketMutation.isPending}
+                                                >
+                                                    {shiprocketMutation.isPending ? (
+                                                        <div className="h-4 w-4 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
+                                                    ) : (
+                                                        <Package className="h-4 w-4" />
+                                                    )}
+                                                    Assign AWB & Label
+                                                </Button>
                                             </div>
-                                            <div>
-                                                <p className="text-sm font-medium">{item.product?.name || "Product Name"}</p>
-                                                <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
+                                        ) : (
+                                            <div className="pt-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="w-full justify-start gap-2 h-9"
+                                                    onClick={() => shiprocketMutation.mutate(selectedOrder)}
+                                                    disabled={shiprocketMutation.isPending}
+                                                >
+                                                    {shiprocketMutation.isPending ? (
+                                                        <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                                    ) : (
+                                                        <Package className="h-4 w-4" />
+                                                    )}
+                                                    Create Shiprocket Order
+                                                </Button>
+                                                <p className="text-[10px] text-muted-foreground mt-2">
+                                                    Manual fallback in case of automated fulfillment error.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Items Section */}
+                            <div>
+                                <h4 className="text-sm font-semibold mb-4">Items ({selectedOrder.order_items.length})</h4>
+                                <div className="space-y-4">
+                                    {selectedOrder.order_items.map((item) => (
+                                        <div key={item.id} className="flex items-start justify-between py-2 border-b last:border-0">
+                                            <div className="flex items-start gap-4">
+                                                <div className="h-12 w-12 bg-muted rounded flex items-center justify-center shrink-0">
+                                                    <Package size={20} className="text-muted-foreground" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">{item.product?.name || item.product_name}</p>
+                                                    <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
+                                                        <p>Qty: {item.quantity}</p>
+                                                        {item.size && <p>Size: {item.size}</p>}
+                                                        {item.sku && <p>SKU: {item.sku}</p>}
+                                                        {item.custom_measurements && Object.keys(item.custom_measurements).length > 0 && (
+                                                            <div className="mt-2">
+                                                                <p className="font-medium text-[11px] text-foreground mb-1 uppercase tracking-wider">Custom Measurements:</p>
+                                                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-muted/40 p-2 rounded border text-[11px]">
+                                                                    {Object.entries(item.custom_measurements).map(([key, value]) => (
+                                                                        <div key={key} className="flex justify-between border-b border-muted-foreground/10 pb-0.5 last:border-0">
+                                                                            <span className="capitalize opacity-70">{key.replace(/_/g, ' ')}:</span>
+                                                                            <span className="font-medium">{value as string}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-sm font-semibold">
+                                                    {selectedOrder.currency} {(item.price * item.quantity).toFixed(2)}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {selectedOrder.currency} {item.price} each
+                                                </p>
                                             </div>
                                         </div>
-                                        <p className="text-sm font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Total Section */}
+                            <div className="flex justify-end pt-4">
+                                <div className="text-right space-y-1">
+                                    <div className="flex justify-between gap-8 text-lg font-bold">
+                                        <span>Total Amount:</span>
+                                        <span>{selectedOrder.currency} {selectedOrder.total_amount.toFixed(2)}</span>
                                     </div>
-                                ))}
+                                </div>
                             </div>
                         </div>
-
-                        <div className="flex justify-end gap-2 text-lg font-bold">
-                            <span>Total:</span>
-                            <span>${selectedOrder?.total_amount.toFixed(2)}</span>
-                        </div>
-                    </div>
+                    )}
                 </DialogContent>
             </Dialog>
         </div>

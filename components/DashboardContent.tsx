@@ -22,7 +22,6 @@ import {
     TrendingUp,
     ShoppingBag,
     Users,
-    Package,
     AlertTriangle,
     Layers
 } from "lucide-react";
@@ -136,19 +135,19 @@ export default function DashboardContent() {
         {
             accessorKey: "total_amount",
             header: "Amount",
-            cell: ({ row }: { row: any }) => `$${row.original.total_amount.toFixed(2)}`,
+            cell: ({ row }) => `$${row.original.total_amount.toFixed(2)}`,
         },
         {
             accessorKey: "status",
             header: "Status",
-            cell: ({ row }: { row: any }) => (
+            cell: ({ row }) => (
                 <Badge variant="outline">{row.original.status}</Badge>
             ),
         },
         {
             accessorKey: "created_at",
             header: "Date",
-            cell: ({ row }: { row: any }) => format(new Date(row.original.created_at), "MMM dd, hh:mm a"),
+            cell: ({ row }) => format(new Date(row.original.created_at), "MMM dd, hh:mm a"),
         },
     ];
 
@@ -203,7 +202,7 @@ export default function DashboardContent() {
                                     />
                                     <Tooltip
                                         contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
-                                        formatter={(value: string | number | any) => [`$${parseFloat(value?.toString() || "0").toFixed(2)}`, "Revenue"]}
+                                        formatter={(value: number | undefined) => [`$${(value || 0).toFixed(2)}`, "Revenue"]}
                                     />
                                     <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
                                         {salesData?.map((_entry, index) => (
