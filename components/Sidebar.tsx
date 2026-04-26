@@ -11,7 +11,8 @@ import {
     ChevronRight,
     ChevronDown,
     Tag,
-    ClipboardList
+    ClipboardList,
+    LayoutTemplate
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -20,13 +21,14 @@ import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 
 const menuItems = [
-    { icon: Home, label: "Dashboard", href: "/" },
+    // { icon: Home, label: "Dashboard", href: "/" },
     { icon: Box, label: "Products", href: "/products" },
     { icon: ShoppingCart, label: "Orders", href: "/orders" },
     { icon: Users, label: "Customers", href: "/customers" },
     { icon: Layers, label: "Collections", href: "/collections" },
-    { icon: Tag, label: "Coupons", href: "/coupons" },
-    { icon: ClipboardList, label: "Inventory", href: "/inventory" },
+    { icon: LayoutTemplate, label: "Hero Slides", href: "/hero-slides" },
+    // { icon: Tag, label: "Coupons", href: "/coupons" },
+    // { icon: ClipboardList, label: "Inventory", href: "/inventory" },
 ];
 
 export default function Sidebar() {
