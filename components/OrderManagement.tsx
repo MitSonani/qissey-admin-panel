@@ -183,12 +183,12 @@ export default function OrderManagement() {
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="pending">Processing</SelectItem>
-                            <SelectItem value="shipped">Shipped</SelectItem>
+                            <SelectItem value="pending">PROCESSING</SelectItem>
+                            <SelectItem value="shipped">SHIPPED</SelectItem>
                             <SelectItem value="processing">INTRANSIT</SelectItem>
-                            <SelectItem value="delivered">Delivered</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                            <SelectItem value="returned">Returned</SelectItem>
+                            <SelectItem value="delivered">DELIVERED</SelectItem>
+                            <SelectItem value="cancelled">CANCELLED</SelectItem>
+                            <SelectItem value="returned">RETURNED</SelectItem>
                         </SelectContent>
                     </Select>
                 );
@@ -269,7 +269,14 @@ export default function OrderManagement() {
                                     <h4 className="text-sm font-semibold mb-2">Order Status</h4>
                                     <div className="text-sm space-y-1">
                                         <p><span className="font-medium">Placed on:</span> {format(new Date(selectedOrder.created_at), "PPP p")}</p>
-                                        <p><span className="font-medium">Status:</span> <span className="capitalize">{selectedOrder.status}</span></p>
+                                        <p>
+                                            <span className="font-medium">Status:</span>{" "}
+                                            <Badge variant="outline" className="uppercase font-bold text-[10px]">
+                                                {selectedOrder.status === 'pending' ? 'PROCESSING' : 
+                                                 selectedOrder.status === 'processing' ? 'INTRANSIT' : 
+                                                 selectedOrder.status.toUpperCase()}
+                                            </Badge>
+                                        </p>
                                         <p><span className="font-medium">Payment:</span> <span className="capitalize">{selectedOrder.payment_status}</span></p>
                                         {selectedOrder.payment_method && (
                                             <p><span className="font-medium">Method:</span> {selectedOrder.payment_method}</p>
