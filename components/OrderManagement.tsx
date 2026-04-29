@@ -183,9 +183,8 @@ export default function OrderManagement() {
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="pending">PROCESSING</SelectItem>
-                            <SelectItem value="shipped">SHIPPED</SelectItem>
-                            <SelectItem value="processing">INTRANSIT</SelectItem>
+                            <SelectItem value="processing">PROCESSING</SelectItem>
+                            <SelectItem value="intransit">INTRANSIT</SelectItem>
                             <SelectItem value="delivered">DELIVERED</SelectItem>
                             <SelectItem value="cancelled">CANCELLED</SelectItem>
                             <SelectItem value="returned">RETURNED</SelectItem>
@@ -272,9 +271,9 @@ export default function OrderManagement() {
                                         <p>
                                             <span className="font-medium">Status:</span>{" "}
                                             <Badge variant="outline" className="uppercase font-bold text-[10px]">
-                                                {selectedOrder.status === 'pending' ? 'PROCESSING' : 
-                                                 selectedOrder.status === 'processing' ? 'INTRANSIT' : 
-                                                 selectedOrder.status.toUpperCase()}
+                                                {selectedOrder.status === 'pending' ? 'PROCESSING' :
+                                                    selectedOrder.status === 'processing' ? 'INTRANSIT' :
+                                                        selectedOrder.status.toUpperCase()}
                                             </Badge>
                                         </p>
                                         <p><span className="font-medium">Payment:</span> <span className="capitalize">{selectedOrder.payment_status}</span></p>
