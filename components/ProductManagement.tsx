@@ -66,6 +66,7 @@ type Variant = {
 
 type Product = {
     id: string;
+    slug: string | null;
     sku: string | null;
     name: string;
     description: string;
@@ -89,12 +90,13 @@ export default function ProductManagement() {
     const queryClient = useQueryClient();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-    const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+    const [selectedProductSlug, setSelectedProductSlug] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [collectionFilter, setCollectionFilter] = useState("all");
 
     // Form State
     const [formData, setFormData] = useState({
+        slug: "",
         sku: "",
         name: "",
         description: "",
@@ -119,7 +121,7 @@ export default function ProductManagement() {
         queryFn: async () => {
             let query = supabase
                 .from("products")
-                .select("id, sku, name, price, discount_price, stock_quantity, status, collection_id, created_at, fabrics, collection:collections(id, name), variants:product_variants(image_urls, is_primary)")
+                .select("id, slug, sku, name, price, discount_price, stock_quantity, status, collection_id, created_at, fabrics, collection:collections(id, name), variants:product_variants(image_urls, is_primary)")
                 .order("created_at", { ascending: false })
                 .order("is_primary", { foreignTable: "product_variants", ascending: false })
                 .limit(1, { foreignTable: 'product_variants' });
@@ -148,13 +150,13 @@ export default function ProductManagement() {
 
     // Fetch Full Product Details (On demand for editing)
     const { data: productDetails, isFetching: isFetchingDetails } = useQuery({
-        queryKey: ["product-details", selectedProductId],
+        queryKey: ["product-details", selectedProductSlug],
         queryFn: async () => {
-            if (!selectedProductId) return null;
+            if (!selectedProductSlug) return null;
             const { data, error } = await supabase
                 .from("products")
                 .select("*, collection:collections(id, name), variants:product_variants(*, color_obj:colors(*))")
-                .eq("id", selectedProductId)
+                .eq("slug", selectedProductSlug)
                 .single();
             if (error) throw error;
 
@@ -185,14 +187,15 @@ export default function ProductManagement() {
                 sizes: Array.from(new Set(variants.map((v: Variant) => v.size)))
             } as Product;
         },
-        enabled: !!selectedProductId,
+        enabled: !!selectedProductSlug,
     });
 
     // Handle initial form population when editing
     useEffect(() => {
-        if (productDetails && editingProduct && selectedProductId === editingProduct.id) {
+        if (productDetails && editingProduct && selectedProductSlug === editingProduct.slug) {
             console.log("Populating form with product details:", productDetails.name, "Variants:", productDetails.variants?.length);
             setFormData({
+                slug: productDetails.slug || "",
                 sku: productDetails.sku || "",
                 name: productDetails.name,
                 description: productDetails.description || "",
@@ -209,7 +212,7 @@ export default function ProductManagement() {
                 sizes: productDetails.sizes || [],
             });
         }
-    }, [productDetails, editingProduct, selectedProductId]);
+    }, [productDetails, editingProduct, selectedProductSlug]);
 
     // Fetch Collections for dropdown
     const { data: collections = [] } = useQuery({
@@ -294,6 +297,7 @@ export default function ProductManagement() {
 
     const resetForm = () => {
         setFormData({
+            slug: "",
             sku: "",
             name: "",
             description: "",
@@ -311,7 +315,7 @@ export default function ProductManagement() {
         });
         setPendingFiles([]);
         setEditingProduct(null);
-        setSelectedProductId(null);
+        setSelectedProductSlug(null);
     };
 
     const handleOpenCreate = () => {
@@ -321,9 +325,10 @@ export default function ProductManagement() {
 
     const handleOpenEdit = (product: Product) => {
         setEditingProduct(product);
-        setSelectedProductId(product.id);
+        setSelectedProductSlug(product.slug);
         // Clear old form data first
         setFormData({
+            slug: product.slug || "",
             sku: product.sku || "",
             name: product.name,
             description: "",
@@ -386,7 +391,13 @@ export default function ProductManagement() {
                 toast.success("All images uploaded", { id: "upload" });
             }
 
+            let finalSlug = formData.slug;
+            if (!finalSlug && formData.name) {
+                finalSlug = formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+            }
+
             const productPayload = {
+                slug: finalSlug,
                 sku: formData.sku,
                 name: formData.name,
                 description: formData.description,
@@ -454,7 +465,7 @@ export default function ProductManagement() {
             }
 
             queryClient.invalidateQueries({ queryKey: ["products"] });
-            queryClient.invalidateQueries({ queryKey: ["product-details", productId] });
+            queryClient.invalidateQueries({ queryKey: ["product-details", productPayload.slug] });
             toast.success(editingProduct ? "Product updated" : "Product created");
             setIsDialogOpen(false);
             resetForm();
@@ -610,9 +621,9 @@ export default function ProductManagement() {
             header: "Price",
             cell: ({ row }: { row: { original: Product } }) => (
                 <div className="flex flex-col">
-                    <span>${row.original.price.toFixed(2)}</span>
+                    <span>INR {row.original.price.toFixed(2)}</span>
                     {row.original.discount_price && (
-                        <span className="text-xs text-destructive line-through">${row.original.discount_price.toFixed(2)}</span>
+                        <span className="text-xs text-destructive line-through">INR {row.original.discount_price.toFixed(2)}</span>
                     )}
                 </div>
             ),
@@ -735,13 +746,22 @@ export default function ProductManagement() {
                                 </div>
 
                                 <div className="lg:col-span-8 space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-foreground/80">SKU</label>
                                             <Input
                                                 placeholder="e.g. NH-001"
                                                 value={formData.sku}
                                                 onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                                                className="bg-muted/30 border border-muted-foreground/10 focus:bg-background transition-all h-10 rounded-md"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-foreground/80">Slug</label>
+                                            <Input
+                                                placeholder="Auto-generated if empty"
+                                                value={formData.slug}
+                                                onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
                                                 className="bg-muted/30 border border-muted-foreground/10 focus:bg-background transition-all h-10 rounded-md"
                                             />
                                         </div>
@@ -838,7 +858,7 @@ export default function ProductManagement() {
 
                                 <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-8">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-foreground/80">Price ($)</label>
+                                        <label className="text-sm font-medium text-foreground/80">Price (INR)</label>
                                         <Input
                                             type="number"
                                             step="0.01"
@@ -850,7 +870,7 @@ export default function ProductManagement() {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-foreground/80">Discount Price ($)</label>
+                                        <label className="text-sm font-medium text-foreground/80">Discount Price (INR)</label>
                                         <Input
                                             type="number"
                                             step="0.01"

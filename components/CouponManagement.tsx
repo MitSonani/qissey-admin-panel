@@ -121,7 +121,7 @@ export default function CouponManagement() {
                 <span>
                     {row.original.discount_type === "percentage"
                         ? `${row.original.discount_value}% OFF`
-                        : `$${row.original.discount_value.toFixed(2)} OFF`}
+                        : `INR ${row.original.discount_value.toFixed(2)} OFF`}
                 </span>
             ),
         },
@@ -195,7 +195,7 @@ export default function CouponManagement() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="percentage">Percentage (%)</SelectItem>
-                                        <SelectItem value="fixed">Fixed Amount ($)</SelectItem>
+                                        <SelectItem value="fixed">Fixed Amount (INR)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

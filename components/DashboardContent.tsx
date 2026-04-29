@@ -69,7 +69,7 @@ export default function DashboardContent() {
             return [
                 {
                     title: "Total Revenue",
-                    value: `$${totalRevenue.toLocaleString()}`,
+                    value: `INR ${totalRevenue.toLocaleString()}`,
                     icon: TrendingUp,
                     description: "Total gross sales",
                     trend: "+12% from last month"
@@ -135,7 +135,7 @@ export default function DashboardContent() {
         {
             accessorKey: "total_amount",
             header: "Amount",
-            cell: ({ row }) => `$${row.original.total_amount.toFixed(2)}`,
+            cell: ({ row }) => `INR ${row.original.total_amount.toFixed(2)}`,
         },
         {
             accessorKey: "status",
@@ -198,11 +198,11 @@ export default function DashboardContent() {
                                         fontSize={12}
                                         tickLine={false}
                                         axisLine={false}
-                                        tickFormatter={(value) => `$${value}`}
+                                        tickFormatter={(value) => `INR ${value}`}
                                     />
                                     <Tooltip
                                         contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
-                                        formatter={(value: number | undefined) => [`$${(value || 0).toFixed(2)}`, "Revenue"]}
+                                        formatter={(value: number | undefined) => [`INR ${(value || 0).toFixed(2)}`, "Revenue"]}
                                     />
                                     <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
                                         {salesData?.map((_entry, index) => (

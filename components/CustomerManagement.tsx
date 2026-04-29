@@ -24,11 +24,25 @@ export default function CustomerManagement() {
         queryKey: ["customers"],
         queryFn: async () => {
             const { data, error } = await supabase
-                .from("customers")
-                .select("*")
-                .order("total_spent", { ascending: false });
+                .from("profiles")
+                .select("*, orders(total_amount)")
+                .order("created_at", { ascending: false });
             if (error) throw error;
-            return data as Customer[];
+            
+            return data.map(profile => {
+                const total_orders = profile.orders?.length || 0;
+                const total_spent = profile.orders?.reduce((acc: number, order: any) => acc + (Number(order.total_amount) || 0), 0) || 0;
+                
+                return {
+                    id: profile.id,
+                    name: profile.name || "Unknown",
+                    email: profile.email,
+                    phone: profile.phone,
+                    total_orders,
+                    total_spent,
+                    created_at: profile.created_at,
+                };
+            }) as Customer[];
         },
     });
 
@@ -65,7 +79,7 @@ export default function CustomerManagement() {
             header: "Total Spent",
             cell: ({ row }) => (
                 <span className="font-semibold text-emerald-600">
-                    ${row.original.total_spent.toFixed(2)}
+                    INR {row.original.total_spent.toFixed(2)}
                 </span>
             ),
         },
