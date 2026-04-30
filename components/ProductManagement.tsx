@@ -589,6 +589,46 @@ export default function ProductManagement() {
         }));
     };
 
+    const handleDragStart = (e: React.DragEvent, index: number, type: 'existing' | 'pending') => {
+        e.dataTransfer.setData("draggedIndex", index.toString());
+        e.dataTransfer.setData("draggedType", type);
+    };
+
+    const handleDrop = (e: React.DragEvent, targetIndex: number, targetType: 'existing' | 'pending', colorId: string) => {
+        e.preventDefault();
+        const sourceIndex = parseInt(e.dataTransfer.getData("draggedIndex"));
+        const sourceType = e.dataTransfer.getData("draggedType");
+
+        if (isNaN(sourceIndex) || sourceType !== targetType) return;
+
+        if (sourceType === 'existing') {
+            setFormData(prev => ({
+                ...prev,
+                variants: prev.variants.map(v => {
+                    if (v.color_id === colorId) {
+                        const newUrls = Array.from(new Set(v.image_urls));
+                        const [dragged] = newUrls.splice(sourceIndex, 1);
+                        newUrls.splice(targetIndex, 0, dragged);
+                        return { ...v, image_urls: newUrls };
+                    }
+                    return v;
+                })
+            }));
+        } else if (sourceType === 'pending') {
+            setPendingFiles(prev => {
+                const colorFiles = prev.filter(p => p.colorId === colorId);
+                const nonColorFiles = prev.filter(p => p.colorId !== colorId);
+                
+                const newColorFiles = [...colorFiles];
+                const [dragged] = newColorFiles.splice(sourceIndex, 1);
+                newColorFiles.splice(targetIndex, 0, dragged);
+                
+                return [...nonColorFiles, ...newColorFiles];
+            });
+        }
+    };
+
+
     const columns: ColumnDef<Product>[] = [
         {
             accessorKey: "variants",
@@ -1180,8 +1220,15 @@ export default function ProductManagement() {
                                                                 .filter(v => v.color_id === colorObj.id)
                                                                 .flatMap(v => v.image_urls)
                                                             )).map((url, i) => (
-                                                                <div key={`existing-${colorObj.id}-${i}`} className="group relative aspect-[3/4] rounded-xl border-none overflow-hidden bg-muted/20 shadow-sm">
-                                                                    <Image src={url} alt="" fill className="object-cover" />
+                                                                <div 
+                                                                    key={`existing-${colorObj.id}-${i}`} 
+                                                                    className="group relative aspect-[3/4] rounded-xl border-none overflow-hidden bg-muted/20 shadow-sm cursor-grab active:cursor-grabbing"
+                                                                    draggable
+                                                                    onDragStart={(e) => handleDragStart(e, i, 'existing')}
+                                                                    onDragOver={(e) => e.preventDefault()}
+                                                                    onDrop={(e) => handleDrop(e, i, 'existing', colorObj.id)}
+                                                                >
+                                                                    <Image src={url} alt="" fill className="object-cover pointer-events-none" />
                                                                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
                                                                         <button
                                                                             type="button"
@@ -1196,8 +1243,15 @@ export default function ProductManagement() {
 
                                                             {/* Pending Images for this color */}
                                                             {pendingFiles.filter(pf => pf.colorId === colorObj.id).map((pf, i) => (
-                                                                <div key={`pending-${colorObj.id}-${i}`} className="group relative aspect-[3/4] rounded-xl border-none overflow-hidden bg-muted/20 shadow-sm border-2 border-primary/20">
-                                                                    <Image src={pf.preview} alt="" fill className="object-cover" />
+                                                                <div 
+                                                                    key={`pending-${colorObj.id}-${i}`} 
+                                                                    className="group relative aspect-[3/4] rounded-xl border-none overflow-hidden bg-muted/20 shadow-sm border-2 border-primary/20 cursor-grab active:cursor-grabbing"
+                                                                    draggable
+                                                                    onDragStart={(e) => handleDragStart(e, i, 'pending')}
+                                                                    onDragOver={(e) => e.preventDefault()}
+                                                                    onDrop={(e) => handleDrop(e, i, 'pending', colorObj.id)}
+                                                                >
+                                                                    <Image src={pf.preview} alt="" fill className="object-cover pointer-events-none" />
                                                                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
                                                                         <button
                                                                             type="button"
