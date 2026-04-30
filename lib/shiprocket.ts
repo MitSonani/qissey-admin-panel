@@ -56,9 +56,10 @@ export async function createShiprocketOrder(order: Order, orderItems: OrderItem[
     const firstName = splitName[0];
     const lastName = splitName.slice(1).join(' ') || '';
 
-    const billingPhoneRaw = (address.phone || "0000000000").toString();
-    const billingPhone = parseInt(billingPhoneRaw.replace(/\D/g, '').slice(-10)) || 0;
-    const billingPincode = address.postal_code ? parseInt(address.postal_code.toString().replace(/\D/g, '')) : 0;
+    const billingPhoneRaw = (address.phone || "9999999999").toString();
+    const billingPhone = parseInt(billingPhoneRaw.replace(/\D/g, '').slice(-10)) || 9999999999;
+    const rawPincode = address.postal_code ? address.postal_code.toString().replace(/\D/g, '') : '';
+    const billingPincode = parseInt(rawPincode) || 110001;
 
     const shiprocketItems = orderItems.map((item) => ({
         name: item.product_name || 'Product',
@@ -91,12 +92,12 @@ export async function createShiprocketOrder(order: Order, orderItems: OrderItem[
             comment: "Order from Website",
             billing_customer_name: firstName,
             billing_last_name: lastName,
-            billing_address: address.line1 || "Not Provided",
-            billing_address_2: address.line2 || "",
-            billing_city: address.city || "Unknown",
+            billing_address: address?.line1 || "",
+            billing_address_2: address?.line2 || "",
+            billing_city: address?.city || "Unknown",
             billing_pincode: billingPincode,
-            billing_state: address.state || "Unknown",
-            billing_country: address.country || "India",
+            billing_state: address?.state || "Unknown",
+            billing_country: address?.country || "India",
             billing_email: address.email || order.customer_email || "noemail@example.com",
             billing_phone: billingPhone,
             shipping_is_billing: true,
