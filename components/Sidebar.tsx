@@ -77,7 +77,7 @@ export default function Sidebar() {
 
     return (
         <aside className={cn(
-            "h-screen bg-card border-r flex flex-col transition-all duration-300",
+            "sticky top-0 h-screen bg-card border-r flex flex-col transition-all duration-300",
             isCollapsed ? "w-20" : "w-64"
         )}>
             <div className="p-6 border-b flex items-center gap-3">
