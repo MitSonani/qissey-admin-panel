@@ -20,7 +20,7 @@ type ProductStock = {
     id: string;
     name: string;
     stock_quantity: number;
-    collection: { name: string } | null;
+    collections: { name: string }[];
 };
 
 export default function InventoryManagement() {
@@ -33,14 +33,14 @@ export default function InventoryManagement() {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from("products")
-                .select("id, name, stock_quantity, collection:collections(name)")
+                .select("id, name, stock_quantity, product_collections(collection:collections(name))")
                 .order("stock_quantity", { ascending: true });
             if (error) throw error;
 
             // Explicitly handling the Supabase relationship response structure
-            return (data as unknown as ProductStock[]).map(p => ({
+            return (data as unknown as any[]).map(p => ({
                 ...p,
-                collection: Array.isArray(p.collection) ? (p.collection as unknown as { name: string }[])[0] : p.collection
+                collections: p.product_collections?.map((pc: any) => pc.collection) || []
             })) as ProductStock[];
         },
     });
@@ -82,7 +82,7 @@ export default function InventoryManagement() {
             cell: ({ row }: { row: { original: ProductStock } }) => (
                 <div className="flex flex-col">
                     <span className="font-medium">{row.original.name}</span>
-                    <span className="text-xs text-muted-foreground">{row.original.collection?.name || "No Collection"}</span>
+                    <span className="text-xs text-muted-foreground">{row.original.collections && row.original.collections.length > 0 ? row.original.collections.map(c => c.name).join(", ") : "No Collection"}</span>
                 </div>
             ),
         },

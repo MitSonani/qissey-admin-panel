@@ -82,7 +82,7 @@ type Product = {
     sizes?: string[];
     colors?: ColorItem[];
     created_at: string;
-    collection?: Collection;
+    collections?: Collection[];
     variants?: Variant[];
 };
 
@@ -102,7 +102,7 @@ export default function ProductManagement() {
         description: "",
         price: "",
         discount_price: "",
-        collection_id: "",
+        collection_ids: [] as string[],
         stock_quantity: "",
         status: "active" as "active" | "inactive",
         new_arrival: false,
@@ -119,9 +119,15 @@ export default function ProductManagement() {
     const { data: products = [], isLoading: isListLoading } = useQuery({
         queryKey: ["products", searchQuery, collectionFilter],
         queryFn: async () => {
+            let selectQuery = "id, slug, sku, name, price, discount_price, stock_quantity, status, created_at, fabrics, product_collections(collection:collections(id, name)), variants:product_variants(image_urls, is_primary)";
+            
+            if (collectionFilter !== "all") {
+                selectQuery = "id, slug, sku, name, price, discount_price, stock_quantity, status, created_at, fabrics, product_collections!inner(collection_id, collection:collections(id, name)), variants:product_variants(image_urls, is_primary)";
+            }
+
             let query = supabase
                 .from("products")
-                .select("id, slug, sku, name, price, discount_price, stock_quantity, status, collection_id, created_at, fabrics, collection:collections(id, name), variants:product_variants(image_urls, is_primary)")
+                .select(selectQuery)
                 .order("created_at", { ascending: false })
                 .order("is_primary", { foreignTable: "product_variants", ascending: false })
                 .limit(1, { foreignTable: 'product_variants' });
@@ -131,14 +137,15 @@ export default function ProductManagement() {
             }
 
             if (collectionFilter !== "all") {
-                query = query.eq("collection_id", collectionFilter);
+                query = query.eq("product_collections.collection_id", collectionFilter);
             }
 
             const { data, error } = await query;
             if (error) throw error;
 
-            return (data as unknown as Product[]).map(p => ({
+            return (data as unknown as any[]).map(p => ({
                 ...p,
+                collections: p.product_collections?.map((pc: any) => pc.collection) || [],
                 // Ensure variants have defaults for new fields
                 variants: (p.variants?.slice(0, 1) || []).map((v: Variant) => ({
                     ...v,
@@ -155,7 +162,7 @@ export default function ProductManagement() {
             if (!selectedProductSlug) return null;
             const { data, error } = await supabase
                 .from("products")
-                .select("*, collection:collections(id, name), variants:product_variants(*, color_obj:colors(*))")
+                .select("*, product_collections(collection:collections(id, name)), variants:product_variants(*, color_obj:colors(*))")
                 .eq("slug", selectedProductSlug)
                 .single();
             if (error) throw error;
@@ -182,6 +189,7 @@ export default function ProductManagement() {
 
             return {
                 ...data,
+                collections: data.product_collections?.map((pc: any) => pc.collection) || [],
                 variants,
                 colors: Array.from(colorsMap.values()),
                 sizes: Array.from(new Set(variants.map((v: Variant) => v.size)))
@@ -201,7 +209,7 @@ export default function ProductManagement() {
                 description: productDetails.description || "",
                 price: productDetails.price.toString(),
                 discount_price: productDetails.discount_price?.toString() || "",
-                collection_id: productDetails.collection_id || "",
+                collection_ids: productDetails.collections?.map(c => c.id) || [],
                 stock_quantity: productDetails.stock_quantity.toString(),
                 status: productDetails.status,
                 new_arrival: productDetails.new_arrival || false,
@@ -303,7 +311,7 @@ export default function ProductManagement() {
             description: "",
             price: "",
             discount_price: "",
-            collection_id: "",
+            collection_ids: [],
             stock_quantity: "",
             status: "active",
             new_arrival: false,
@@ -334,7 +342,7 @@ export default function ProductManagement() {
             description: "",
             price: product.price.toString(),
             discount_price: product.discount_price?.toString() || "",
-            collection_id: product.collection_id || "",
+            collection_ids: product.collections?.map(c => c.id) || [],
             stock_quantity: product.stock_quantity.toString(),
             status: product.status,
             new_arrival: product.new_arrival || false,
@@ -403,7 +411,6 @@ export default function ProductManagement() {
                 description: formData.description,
                 price: parseFloat(formData.price),
                 discount_price: formData.discount_price ? parseFloat(formData.discount_price) : null,
-                collection_id: formData.collection_id || null,
                 fabrics: formData.fabrics,
                 status: formData.status,
                 new_arrival: formData.new_arrival,
@@ -461,6 +468,24 @@ export default function ProductManagement() {
                         .from("product_variants")
                         .insert(variantsToInsert);
                     if (variantError) throw variantError;
+                }
+
+                // Handle Collections
+                const { error: collDeleteError } = await supabase
+                    .from("product_collections")
+                    .delete()
+                    .eq("product_id", productId);
+                if (collDeleteError) throw collDeleteError;
+
+                if (formData.collection_ids.length > 0) {
+                    const collsToInsert = formData.collection_ids.map(id => ({
+                        product_id: productId,
+                        collection_id: id
+                    }));
+                    const { error: collInsertError } = await supabase
+                        .from("product_collections")
+                        .insert(collsToInsert);
+                    if (collInsertError) throw collInsertError;
                 }
             }
 
@@ -652,7 +677,7 @@ export default function ProductManagement() {
             cell: ({ row }: { row: { original: Product } }) => (
                 <div className="flex flex-col">
                     <span className="font-medium">{row.original.name}</span>
-                    <span className="text-xs text-muted-foreground">{row.original.collection?.name || "No Collection"}</span>
+                    <span className="text-xs text-muted-foreground">{row.original.collections && row.original.collections.length > 0 ? row.original.collections.map(c => c.name).join(", ") : "No Collection"}</span>
                 </div>
             ),
         },
@@ -819,22 +844,45 @@ export default function ProductManagement() {
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-foreground/80">Collection</label>
+                                            <label className="text-sm font-medium text-foreground/80">Collections</label>
                                             <Select
-                                                value={formData.collection_id}
-                                                onValueChange={(v) => setFormData({ ...formData, collection_id: v })}
+                                                value=""
+                                                onValueChange={(v) => {
+                                                    if (!formData.collection_ids.includes(v)) {
+                                                        setFormData({ ...formData, collection_ids: [...formData.collection_ids, v] });
+                                                    }
+                                                }}
                                             >
                                                 <SelectTrigger className="h-10 bg-muted/30 border border-muted-foreground/10 rounded-md">
-                                                    <SelectValue placeholder="Select collection" />
+                                                    <SelectValue placeholder="Add collections" />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     {collections.map((col) => (
-                                                        <SelectItem key={col.id} value={col.id}>
+                                                        <SelectItem key={col.id} value={col.id} disabled={formData.collection_ids.includes(col.id)}>
                                                             {col.name}
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>
                                             </Select>
+                                            {formData.collection_ids.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 mt-2">
+                                                    {formData.collection_ids.map(id => {
+                                                        const col = collections.find(c => c.id === id);
+                                                        return col ? (
+                                                            <Badge key={id} variant="secondary" className="pl-2 pr-1 py-1 gap-1">
+                                                                {col.name}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setFormData({ ...formData, collection_ids: formData.collection_ids.filter(cid => cid !== id) })}
+                                                                    className="text-muted-foreground hover:text-destructive transition-colors ml-1"
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
+                                                            </Badge>
+                                                        ) : null;
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-foreground/80">Status</label>
