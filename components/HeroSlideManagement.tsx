@@ -184,13 +184,13 @@ export default function HeroSlideManagement() {
         try {
             if (pendingDesktopFile) {
                 toast.loading("Uploading desktop image...", { id: "upload-desktop" });
-                desktopUrl = await uploadImage(pendingDesktopFile.file, "banners");
+                desktopUrl = await uploadImage(pendingDesktopFile.file, "", "banners");
                 toast.success("Desktop image uploaded", { id: "upload-desktop" });
             }
 
             if (pendingMobileFile) {
                 toast.loading("Uploading mobile image...", { id: "upload-mobile" });
-                mobileUrl = await uploadImage(pendingMobileFile.file, "banners");
+                mobileUrl = await uploadImage(pendingMobileFile.file, "", "banners");
                 toast.success("Mobile image uploaded", { id: "upload-mobile" });
             }
 
