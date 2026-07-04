@@ -116,6 +116,7 @@ export default function OrderManagement() {
                     shiprocket_order_id: data.shiprocket_order_id.toString(),
                     shiprocket_shipment_id: data.shiprocket_shipment_id.toString(),
                     shiprocket_awb: data.awb_code,
+                    shiprocket_label_url: data.label_url,
                     status: "processing"
                 })
                 .eq("id", variables.id);
@@ -157,6 +158,9 @@ export default function OrderManagement() {
                 <div className="flex flex-col">
                     <span className="font-medium">{row.original.customer_name}</span>
                     <span className="text-xs text-muted-foreground">{row.original.customer_email}</span>
+                    {row.original.customer_phone && (
+                        <span className="text-xs text-muted-foreground">Ph: {row.original.customer_phone}</span>
+                    )}
                 </div>
             ),
         },
@@ -262,6 +266,9 @@ export default function OrderManagement() {
                                     <div className="text-sm space-y-1">
                                         <p><span className="font-medium">Name:</span> {selectedOrder.customer_name}</p>
                                         <p><span className="font-medium">Email:</span> {selectedOrder.customer_email}</p>
+                                        {selectedOrder.customer_phone && (
+                                            <p><span className="font-medium">Phone:</span> {selectedOrder.customer_phone}</p>
+                                        )}
                                     </div>
                                 </div>
                                 <div>
@@ -294,6 +301,9 @@ export default function OrderManagement() {
                                             {selectedOrder.shipping_address.line2 && <p>{selectedOrder.shipping_address.line2}</p>}
                                             <p>{selectedOrder.shipping_address.city}, {selectedOrder.shipping_address.state} {selectedOrder.shipping_address.postal_code}</p>
                                             <p>{selectedOrder.shipping_address.country}</p>
+                                            {selectedOrder.shipping_address.phone && (
+                                                <p className="pt-2"><span className="font-medium text-foreground">Phone:</span> {selectedOrder.shipping_address.phone}</p>
+                                            )}
 
                                         </div>
                                     ) : (
@@ -317,6 +327,14 @@ export default function OrderManagement() {
                                                 )}
                                                 {selectedOrder.shiprocket_awb && (
                                                     <p><span className="font-medium">AWB:</span> {selectedOrder.shiprocket_awb}</p>
+                                                )}
+                                                {selectedOrder.shiprocket_label_url && (
+                                                    <p>
+                                                        <span className="font-medium">Label:</span>{" "}
+                                                        <a href={selectedOrder.shiprocket_label_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                                                            View Label
+                                                        </a>
+                                                    </p>
                                                 )}
                                                 <div className="pt-2">
                                                     <Button

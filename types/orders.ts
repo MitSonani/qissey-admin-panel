@@ -32,6 +32,7 @@ export interface Order {
     id: string;
     customer_name: string;
     customer_email: string;
+    customer_phone?: string;
     total_amount: number;
     currency: string;
     status: string;
@@ -43,6 +44,7 @@ export interface Order {
     shiprocket_order_id?: string;
     shiprocket_shipment_id?: string;
     shiprocket_awb?: string;
+    shiprocket_label_url?: string;
     created_at: string;
     order_items: OrderItem[];
 }

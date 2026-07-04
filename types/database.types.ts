@@ -142,6 +142,7 @@ export interface Database {
                     customer_id: string | null
                     customer_name: string
                     customer_email: string
+                    customer_phone: string | null
                     total_amount: number
                     currency: string
                     status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned'
@@ -153,6 +154,7 @@ export interface Database {
                     shiprocket_order_id: string | null
                     shiprocket_shipment_id: string | null
                     shiprocket_awb: string | null
+                    shiprocket_label_url: string | null
                     created_at: string
                     updated_at: string
                 }
@@ -161,6 +163,7 @@ export interface Database {
                     customer_id?: string | null
                     customer_name: string
                     customer_email: string
+                    customer_phone?: string | null
                     total_amount: number
                     currency?: string
                     status?: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned'
@@ -172,6 +175,7 @@ export interface Database {
                     shiprocket_order_id?: string | null
                     shiprocket_shipment_id?: string | null
                     shiprocket_awb?: string | null
+                    shiprocket_label_url?: string | null
                     created_at?: string
                     updated_at?: string
                 }
@@ -180,6 +184,7 @@ export interface Database {
                     customer_id?: string | null
                     customer_name?: string
                     customer_email?: string
+                    customer_phone?: string | null
                     total_amount?: number
                     currency?: string
                     status?: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned'
@@ -191,6 +196,7 @@ export interface Database {
                     shiprocket_order_id?: string | null
                     shiprocket_shipment_id?: string | null
                     shiprocket_awb?: string | null
+                    shiprocket_label_url?: string | null
                     created_at?: string
                     updated_at?: string
                 }
