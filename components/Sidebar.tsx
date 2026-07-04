@@ -13,7 +13,8 @@ import {
     Tag,
     ClipboardList,
     LayoutTemplate,
-    MessageSquare
+    MessageSquare,
+    Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -29,6 +30,7 @@ const menuItems = [
     { icon: Layers, label: "Collections", href: "/collections" },
     { icon: LayoutTemplate, label: "Hero Slides", href: "/hero-slides" },
     { icon: MessageSquare, label: "Messages", href: "/contacts" },
+    { icon: Star, label: "Reviews", href: "/reviews" },
     // { icon: Tag, label: "Coupons", href: "/coupons" },
     // { icon: ClipboardList, label: "Inventory", href: "/inventory" },
 ];
