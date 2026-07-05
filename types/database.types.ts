@@ -265,6 +265,26 @@ export interface Database {
                     created_at?: string
                 }
             }
+            product_measurements: {
+                Row: {
+                    id: string
+                    product_id: string
+                    size_chart: Json | null
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    product_id: string
+                    size_chart?: Json | null
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    product_id?: string
+                    size_chart?: Json | null
+                    created_at?: string
+                }
+            }
         }
     }
 }

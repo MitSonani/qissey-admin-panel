@@ -14,7 +14,8 @@ import {
     ClipboardList,
     LayoutTemplate,
     MessageSquare,
-    Star
+    Star,
+    Ruler
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -25,6 +26,7 @@ import { useState, useEffect } from "react";
 const menuItems = [
     // { icon: Home, label: "Dashboard", href: "/" },
     { icon: Box, label: "Products", href: "/products" },
+    { icon: Ruler, label: "Measurements", href: "/measurements" },
     { icon: ShoppingCart, label: "Orders", href: "/orders" },
     { icon: Users, label: "Customers", href: "/customers" },
     { icon: Layers, label: "Collections", href: "/collections" },
