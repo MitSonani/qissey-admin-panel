@@ -110,7 +110,7 @@ export default function ReviewManagement() {
             accessorKey: "comment",
             header: "Comment",
             cell: ({ row }) => (
-                <div className="max-w-[300px] truncate" title={row.original.comment}>
+                <div className="min-w-[200px] max-w-[500px] whitespace-pre-wrap break-words">
                     {row.original.comment}
                 </div>
             ),
