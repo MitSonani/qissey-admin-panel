@@ -24,7 +24,7 @@ import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 
 const menuItems = [
-    // { icon: Home, label: "Dashboard", href: "/" },
+    { icon: Home, label: "Dashboard", href: "/dashboard" },
     { icon: Box, label: "Products", href: "/products" },
     { icon: Ruler, label: "Measurements", href: "/measurements" },
     { icon: ShoppingCart, label: "Orders", href: "/orders" },
