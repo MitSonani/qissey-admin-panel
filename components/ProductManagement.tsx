@@ -77,6 +77,7 @@ type Product = {
     stock_quantity: number;
     status: "active" | "inactive";
     new_arrival: boolean;
+    show_on_home: boolean;
     complete_the_look?: string[];
     // Derived/Local only (not in DB)
     sizes?: string[];
@@ -106,6 +107,7 @@ export default function ProductManagement() {
         stock_quantity: "",
         status: "active" as "active" | "inactive",
         new_arrival: false,
+        show_on_home: false,
         fabrics: [] as string[],
         complete_the_look: [] as string[],
         variants: [] as Variant[],
@@ -213,6 +215,7 @@ export default function ProductManagement() {
                 stock_quantity: productDetails.stock_quantity.toString(),
                 status: productDetails.status,
                 new_arrival: productDetails.new_arrival || false,
+                show_on_home: productDetails.show_on_home || false,
                 fabrics: productDetails.fabrics || [],
                 complete_the_look: productDetails.complete_the_look || [],
                 variants: productDetails.variants || [],
@@ -315,6 +318,7 @@ export default function ProductManagement() {
             stock_quantity: "",
             status: "active",
             new_arrival: false,
+            show_on_home: false,
             fabrics: [],
             complete_the_look: [],
             variants: [],
@@ -346,6 +350,7 @@ export default function ProductManagement() {
             stock_quantity: product.stock_quantity.toString(),
             status: product.status,
             new_arrival: product.new_arrival || false,
+            show_on_home: product.show_on_home || false,
             fabrics: product.fabrics || [],
             complete_the_look: [],
             variants: [],
@@ -414,6 +419,7 @@ export default function ProductManagement() {
                 fabrics: formData.fabrics,
                 status: formData.status,
                 new_arrival: formData.new_arrival,
+                show_on_home: formData.show_on_home,
                 complete_the_look: formData.complete_the_look,
                 stock_quantity: currentVariants.reduce((acc, v) => acc + v.stock_quantity, 0),
             };
@@ -912,6 +918,21 @@ export default function ProductManagement() {
                                                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                             >
                                                 New Arrival Product
+                                            </Label>
+                                        </div>
+                                        <div className="flex items-center space-x-2 pt-4">
+                                            <Checkbox
+                                                id="show_on_home"
+                                                checked={formData.show_on_home}
+                                                onCheckedChange={(checked) =>
+                                                    setFormData({ ...formData, show_on_home: checked as boolean })
+                                                }
+                                            />
+                                            <Label
+                                                htmlFor="show_on_home"
+                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                            >
+                                                Show on Home Page
                                             </Label>
                                         </div>
                                     </div>
